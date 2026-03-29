@@ -23,12 +23,16 @@ ARC is local-first. Your project stays on disk. The CLI is the runtime. The desk
 ## What is in this repo
 
 - [cmd/arc](./cmd/arc) — the main CLI
-- [cmd/arc-desktop](./cmd/arc-desktop) — local browser preview
 - [cmd/arc-desktop-wails](./cmd/arc-desktop-wails) — native desktop launcher
 - [apps/desktop](./apps/desktop) — desktop product zone
-- [apps/docs](./apps/docs) — product documentation site
-- [presets/official](./presets/official) — built-in packs
-- [content/editorial](./content/editorial) — posts, articles, campaigns
+- [internal/app](./internal/app) — runtime service layer shared by CLI and desktop
+- [internal/liveapp](./internal/liveapp) — managed live preview runtime for demos and miniapps
+
+Related repos:
+
+- `arc-docs` — public docs site and end-user guides
+- `arc-presets` — preset catalog and preset-spec artifacts
+- `arc-editorial` — posts, articles, and rollout content
 
 ## Quick start
 
@@ -105,7 +109,7 @@ Use the CLI if you want direct control or terminal-first workflows:
 - `arc chat start ...`
 - `arc preset list`
 
-Beginner guide: [apps/docs/docs/cli-guide.md](./apps/docs/docs/cli-guide.md)
+Beginner guide: see `arc-docs` for the published CLI guide.
 
 ### Desktop
 
@@ -118,7 +122,7 @@ Use the desktop app if you want a simpler, more visual flow:
 - demos, plans, and checks open inside the session instead of a separate task manager
 - managed local runtime for simple demos and mini-sites directly inside the app, without requiring Docker
 
-Beginner guide: [apps/docs/docs/desktop-guide.md](./apps/docs/docs/desktop-guide.md)
+Beginner guide: see `arc-docs` for the published desktop guide.
 
 Current default:
 
@@ -128,30 +132,7 @@ Current default:
 
 ## Documentation
 
-Main docs:
-
-- [Overview](./apps/docs/docs/intro.md)
-- [Install](./apps/docs/docs/install.md)
-- [Quick start](./apps/docs/docs/quickstart.md)
-- [CLI guide](./apps/docs/docs/cli-guide.md)
-- [Desktop guide](./apps/docs/docs/desktop-guide.md)
-- [First task walkthrough](./apps/docs/docs/first-task.md)
-- [Commands](./apps/docs/docs/commands.md)
-- [FAQ](./apps/docs/docs/faq.md)
-- [Screenshot checklist](./apps/docs/docs/screenshots.md)
-
-Run the docs site locally only when needed:
-
-```bash
-make docs-install
-make docs-dev
-```
-
-Build the docs site:
-
-```bash
-make docs-build
-```
+Product docs live in the separate `arc-docs` repository.
 
 ## Current status
 

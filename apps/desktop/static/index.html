@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARC Preview</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">ARC</div>
+          <div>
+            <div class="eyebrow">Preview</div>
+            <h1>ARC</h1>
+            <p class="brand-copy">Зеркало desktop UX в браузере для быстрой проверки нового chat-first пути.</p>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-screen="chat">Чат</button>
+          <button id="nav-testing" class="nav-item hidden" data-screen="testing" data-requires-project="true">Тестирование</button>
+          <button class="nav-item" data-screen="settings">Настройки</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="topbar-spacer"></div>
+          <nav id="topbar-nav" class="topbar-nav">
+            <button class="topbar-nav-item active" data-screen="chat">Чат</button>
+            <button id="topbar-testing" class="topbar-nav-item hidden" data-screen="testing" data-requires-project="true">Тестирование</button>
+          </nav>
+        </header>
+
+        <div id="status-banner"></div>
+
+        <section id="screen-chat" class="screen active">
+          <div class="chat-screen-shell">
+            <div id="chat-main"></div>
+            <div id="chat-side"></div>
+          </div>
+        </section>
+
+        <section id="screen-settings" class="screen">
+          <div class="section-intro">
+            <div>
+              <div class="eyebrow">Настройки</div>
+              <h2>Состояние preview и подключённых агентов</h2>
+            </div>
+            <p>Здесь видно лог preview, путь к проекту и доступных агентов.</p>
+          </div>
+          <div class="grid one">
+            <div id="settings-panel"></div>
+          </div>
+        </section>
+
+        <section id="screen-testing" class="screen">
+          <div class="section-intro">
+            <div>
+              <div class="eyebrow">Тестирование</div>
+              <h2>Автономный тур по возможностям ARC</h2>
+            </div>
+            <p>Dev-only экран, где можно прогонять сценарии демонстрации системы пошагово или полностью автоматически.</p>
+          </div>
+          <div class="grid two">
+            <div id="testing-main"></div>
+            <div id="testing-side"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="welcome-overlay" class="welcome-overlay"></div>
+    <div id="demo-overlay" class="welcome-overlay"></div>
+    <div id="display-overlay" class="welcome-overlay"></div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

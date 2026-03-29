@@ -1,0 +1,9 @@
+{
+  "name": "arc-desktop-wails-shim",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "node -e \"console.log('arc-desktop native assets are embedded from apps/desktop/wailsapp/frontend')\"",
+    "build": "node -e \"console.log('arc-desktop native assets are embedded from apps/desktop/wailsapp/frontend')\""
+  }
+}
