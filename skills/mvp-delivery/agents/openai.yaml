@@ -1,0 +1,7 @@
+interface:
+  display_name: "MVP Delivery"
+  short_description: "Ship verified Agent Runtime CLI MVP slices"
+  default_prompt: "Use $mvp-delivery to implement the next verified MVP slice for Agent Runtime CLI."
+
+policy:
+  allow_implicit_invocation: true

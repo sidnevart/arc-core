@@ -1,0 +1,101 @@
+package cli
+
+import (
+	"errors"
+	"fmt"
+)
+
+func Run(args []string) error {
+	if len(args) == 0 {
+		printUsage()
+		return nil
+	}
+
+	switch args[0] {
+	case "doctor":
+		return runDoctor(args[1:])
+	case "init":
+		return runInit(args[1:])
+	case "workspace":
+		return runWorkspace(args[1:])
+	case "chat":
+		return runChat(args[1:])
+	case "mode":
+		return runMode(args[1:])
+	case "index":
+		return runIndex(args[1:])
+	case "task":
+		return runTask(args[1:])
+	case "preset":
+		return runPreset(args[1:])
+	case "docs":
+		return runDocs(args[1:])
+	case "memory":
+		return runMemory(args[1:])
+	case "questions":
+		return runQuestions(args[1:])
+	case "run":
+		return runRun(args[1:])
+	case "learn":
+		return runLearn(args[1:])
+	case "help", "-h", "--help":
+		printUsage()
+		return nil
+	default:
+		return fmt.Errorf("unknown command %q", args[0])
+	}
+}
+
+func printUsage() {
+	fmt.Println("arc - Agent Runtime CLI")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println("  arc doctor")
+	fmt.Println("  arc init [--path DIR] [--provider codex,claude] [--mode study|work|hero]")
+	fmt.Println("  arc workspace summary [--path DIR] [--json]")
+	fmt.Println("  arc workspace repair [--path DIR] [--json]")
+	fmt.Println("  arc workspace verify [--path DIR] [--profile ID | --verifier ID] [--json]")
+	fmt.Println("  arc chat start [--path DIR] [--provider NAME] [--mode MODE] [--model MODEL] [--dry-run] [--json] <prompt>")
+	fmt.Println("  arc chat send [--path DIR] [--session ID] [--model MODEL] [--dry-run] [--json] <prompt>")
+	fmt.Println("  arc chat list [--path DIR] [--limit N] [--json]")
+	fmt.Println("  arc chat show [--path DIR] [--session ID] [--json]")
+	fmt.Println("  arc mode set <study|work|hero> [--path DIR]")
+	fmt.Println("  arc mode show [--path DIR] [--json]")
+	fmt.Println("  arc index build [--path DIR]")
+	fmt.Println("  arc index refresh [--path DIR]")
+	fmt.Println("  arc task plan [--path DIR] [--mode MODE] [--provider NAME] <task>")
+	fmt.Println("  arc task run [--path DIR] [--mode MODE] [--provider NAME] [--dry-run] [--run-checks] [--approve-risky] [--provider-timeout DURATION] <task>")
+	fmt.Println("  arc task verify [--path DIR] [--run-id ID] [--run-checks]")
+	fmt.Println("  arc task review [--path DIR] [--run-id ID]")
+	fmt.Println("  arc preset list [--root DIR] [--json]")
+	fmt.Println("  arc preset validate [--root DIR] [--json] <preset-id>")
+	fmt.Println("  arc preset preview [--root DIR] [--path DIR] [--json] <preset-id>")
+	fmt.Println("  arc preset install [--root DIR] [--path DIR] [--force] [--json] <preset-id>")
+	fmt.Println("  arc preset rollback [--path DIR] [--json] <install-id>")
+	fmt.Println("  arc docs generate [--path DIR] [--run-id ID] [--apply]")
+	fmt.Println("  arc memory status [--path DIR] [--json]")
+	fmt.Println("  arc memory compact [--path DIR]")
+	fmt.Println("  arc questions show [--path DIR]")
+	fmt.Println("  arc run list [--path DIR] [--limit N] [--json]")
+	fmt.Println("  arc run status [--path DIR] [--run-id ID]")
+	fmt.Println("  arc run resume [--path DIR] [--run-id ID] [--model MODEL] [--dry-run] [prompt]")
+	fmt.Println("  arc learn <topic>")
+	fmt.Println("  arc learn quiz [--path DIR]")
+	fmt.Println("  arc learn prove <claim>")
+}
+
+func requireNoArgs(args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("unexpected arguments: %v", args)
+	}
+	return nil
+}
+
+func requireMode(mode string) error {
+	switch mode {
+	case "study", "work", "hero":
+		return nil
+	default:
+		return errors.New("mode must be one of: study, work, hero")
+	}
+}
