@@ -317,6 +317,47 @@ func TestEnsureLiveAppRestartsStoppedPreviewFromSource(t *testing.T) {
 	}
 }
 
+func TestSyncSessionMaterialWithLiveAppsPrefersSharedRuntimeTruth(t *testing.T) {
+	item := SessionMaterialCard{
+		ID:         "output-1",
+		Type:       "simulation",
+		Title:      "Miniapp",
+		Launchable: true,
+		Status:     "stopped",
+	}
+	live := []LiveAppSummary{{
+		ID:         "live-1",
+		Origin:     "output-1",
+		Type:       "simulation",
+		Status:     "ready",
+		PreviewURL: "http://127.0.0.1:4567/index.html",
+	}}
+
+	got := syncSessionMaterialWithLiveApps(item, live)
+	if got.LiveAppID != "live-1" || got.Status != "ready" || got.URL == "" {
+		t.Fatalf("expected live runtime to win, got %#v", got)
+	}
+}
+
+func TestSyncMessageOutputWithLiveAppsFallsBackToStoppedWhenRuntimeMissing(t *testing.T) {
+	item := MessageOutputRef{
+		ID:         "output-2",
+		Kind:       "demo",
+		Launchable: true,
+		LiveAppID:  "old-live",
+		Status:     "ready",
+		URL:        "http://127.0.0.1:9999/index.html",
+	}
+
+	got := syncMessageOutputWithLiveApps(item, nil)
+	if got.Status != "stopped" {
+		t.Fatalf("expected missing runtime to degrade to stopped, got %#v", got)
+	}
+	if got.LiveAppID != "" || got.URL != "" {
+		t.Fatalf("expected stale runtime pointers to be cleared, got %#v", got)
+	}
+}
+
 func TestSessionSummaryUsesFirstUserMessageForTitle(t *testing.T) {
 	session := chat.Session{
 		ID:        "chat-1",

@@ -979,11 +979,13 @@ func firstSessionTitleMessage(session chat.Session) string {
 func (s Service) sessionDetailWithLiveApps(root string, session chat.Session) SessionDetail {
 	detail := chatDetailFromSession(session)
 	liveApps, _ := s.ListLiveApps(root, session.ID)
+	materials := syncSessionMaterialsWithLiveApps(sessionMaterialCards(root, session), liveApps)
+	messages := syncChatMessagesWithLiveApps(detail.Messages, liveApps)
 	return SessionDetail{
 		Session:        sessionSummaryFromSession(session),
-		Messages:       detail.Messages,
+		Messages:       messages,
 		Runs:           sessionRuns(root, session),
-		Materials:      sessionMaterialCards(root, session),
+		Materials:      materials,
 		LiveApps:       liveApps,
 		Metadata:       detail.Metadata,
 		Live:           detail.Live,
@@ -991,6 +993,99 @@ func (s Service) sessionDetailWithLiveApps(root string, session chat.Session) Se
 		ProjectRoot:    root,
 		AllowedActions: allowedActionsForMode(session.Mode),
 	}
+}
+
+func syncSessionMaterialsWithLiveApps(items []SessionMaterialCard, liveApps []LiveAppSummary) []SessionMaterialCard {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]SessionMaterialCard, 0, len(items))
+	for _, item := range items {
+		out = append(out, syncSessionMaterialWithLiveApps(item, liveApps))
+	}
+	return out
+}
+
+func syncChatMessagesWithLiveApps(messages []ChatMessage, liveApps []LiveAppSummary) []ChatMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]ChatMessage, 0, len(messages))
+	for _, message := range messages {
+		cloned := message
+		if len(message.Outputs) > 0 {
+			cloned.Outputs = syncMessageOutputsWithLiveApps(message.Outputs, liveApps)
+		}
+		out = append(out, cloned)
+	}
+	return out
+}
+
+func syncMessageOutputsWithLiveApps(outputs []MessageOutputRef, liveApps []LiveAppSummary) []MessageOutputRef {
+	if len(outputs) == 0 {
+		return nil
+	}
+	out := make([]MessageOutputRef, 0, len(outputs))
+	for _, item := range outputs {
+		out = append(out, syncMessageOutputWithLiveApps(item, liveApps))
+	}
+	return out
+}
+
+func syncSessionMaterialWithLiveApps(item SessionMaterialCard, liveApps []LiveAppSummary) SessionMaterialCard {
+	if live, ok := selectLiveAppForOrigin(liveApps, item.LiveAppID, item.ID); ok {
+		item.LiveAppID = live.ID
+		item.Status = live.Status
+		item.URL = live.PreviewURL
+		item.Error = live.StopReason
+		return item
+	}
+	if item.Launchable || item.LiveAppID != "" || item.Type == "demo" || item.Type == "simulation" {
+		item.LiveAppID = ""
+		item.URL = ""
+		if item.Status == "" || item.Status == "ready" || item.Status == "starting" {
+			item.Status = "stopped"
+		}
+	}
+	return item
+}
+
+func syncMessageOutputWithLiveApps(item MessageOutputRef, liveApps []LiveAppSummary) MessageOutputRef {
+	if live, ok := selectLiveAppForOrigin(liveApps, item.LiveAppID, item.ID); ok {
+		item.LiveAppID = live.ID
+		item.Status = live.Status
+		item.URL = live.PreviewURL
+		item.Error = live.StopReason
+		return item
+	}
+	if item.Launchable || item.LiveAppID != "" || item.Kind == "demo" || item.Kind == "simulation" {
+		item.LiveAppID = ""
+		item.URL = ""
+		if item.Status == "" || item.Status == "ready" || item.Status == "starting" {
+			item.Status = "stopped"
+		}
+	}
+	return item
+}
+
+func selectLiveAppForOrigin(liveApps []LiveAppSummary, appID string, origin string) (LiveAppSummary, bool) {
+	appID = strings.TrimSpace(appID)
+	origin = strings.TrimSpace(origin)
+	if appID != "" {
+		for _, item := range liveApps {
+			if item.ID == appID {
+				return item, true
+			}
+		}
+	}
+	if origin != "" {
+		for _, item := range liveApps {
+			if strings.TrimSpace(item.Origin) == origin {
+				return item, true
+			}
+		}
+	}
+	return LiveAppSummary{}, false
 }
 
 func chatDetailFromSession(session chat.Session) ChatDetail {
