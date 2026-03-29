@@ -358,6 +358,34 @@ func TestSyncMessageOutputWithLiveAppsFallsBackToStoppedWhenRuntimeMissing(t *te
 	}
 }
 
+func TestSelectLiveAppForOriginPrefersActiveOriginOverStoppedPinnedID(t *testing.T) {
+	liveApps := []LiveAppSummary{
+		{
+			ID:         "old-live",
+			Origin:     "output-3",
+			Status:     "stopped",
+			PreviewURL: "",
+			UpdatedAt:  "2026-03-29T10:00:00Z",
+			StopReason: "stopped_by_user",
+		},
+		{
+			ID:         "new-live",
+			Origin:     "output-3",
+			Status:     "ready",
+			PreviewURL: "http://127.0.0.1:4567/index.html",
+			UpdatedAt:  "2026-03-29T10:05:00Z",
+		},
+	}
+
+	got, ok := selectLiveAppForOrigin(liveApps, "old-live", "output-3")
+	if !ok {
+		t.Fatal("expected a matching live app")
+	}
+	if got.ID != "new-live" || got.Status != "ready" {
+		t.Fatalf("expected active origin match to win, got %#v", got)
+	}
+}
+
 func TestSessionSummaryUsesFirstUserMessageForTitle(t *testing.T) {
 	session := chat.Session{
 		ID:        "chat-1",

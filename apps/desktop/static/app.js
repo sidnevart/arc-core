@@ -1252,14 +1252,39 @@ function sessionLiveApps(detail = state.sessionDetail) {
 
 function findLiveApp(detail, appID = "", origin = "") {
   const apps = sessionLiveApps(detail);
+  let byID = null;
   if (appID) {
-    const byID = apps.find((item) => item.id === appID);
-    if (byID) return byID;
+    byID = apps.find((item) => item.id === appID) || null;
   }
   if (origin) {
-    return apps.find((item) => (item.origin || "") === origin) || null;
+    const matches = apps.filter((item) => (item.origin || "") === origin);
+    if (matches.length) {
+      const best = matches.sort((a, b) => {
+        const rankDelta = liveStatusRank(b?.status) - liveStatusRank(a?.status);
+        if (rankDelta !== 0) return rankDelta;
+        return String(b?.updated_at || b?.updatedAt || "").localeCompare(String(a?.updated_at || a?.updatedAt || ""));
+      })[0];
+      if (!byID) return best;
+      if (byID.id === best.id) return byID;
+      return liveStatusRank(byID.status) >= liveStatusRank(best.status) ? byID : best;
+    }
   }
-  return null;
+  return byID;
+}
+
+function liveStatusRank(status) {
+  switch (String(status || "").trim()) {
+    case "ready":
+      return 4;
+    case "starting":
+      return 3;
+    case "failed":
+      return 2;
+    case "stopped":
+      return 1;
+    default:
+      return 0;
+  }
 }
 
 function liveAppRuntime(detail, appID = "", origin = "", fallbackURL = "") {

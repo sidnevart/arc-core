@@ -1037,7 +1037,11 @@ func syncSessionMaterialWithLiveApps(item SessionMaterialCard, liveApps []LiveAp
 		item.LiveAppID = live.ID
 		item.Status = live.Status
 		item.URL = live.PreviewURL
-		item.Error = live.StopReason
+		if live.Status == "ready" || live.Status == "starting" {
+			item.Error = ""
+		} else {
+			item.Error = live.StopReason
+		}
 		return item
 	}
 	if item.Launchable || item.LiveAppID != "" || item.Type == "demo" || item.Type == "simulation" {
@@ -1055,7 +1059,11 @@ func syncMessageOutputWithLiveApps(item MessageOutputRef, liveApps []LiveAppSumm
 		item.LiveAppID = live.ID
 		item.Status = live.Status
 		item.URL = live.PreviewURL
-		item.Error = live.StopReason
+		if live.Status == "ready" || live.Status == "starting" {
+			item.Error = ""
+		} else {
+			item.Error = live.StopReason
+		}
 		return item
 	}
 	if item.Launchable || item.LiveAppID != "" || item.Kind == "demo" || item.Kind == "simulation" {
@@ -1071,21 +1079,58 @@ func syncMessageOutputWithLiveApps(item MessageOutputRef, liveApps []LiveAppSumm
 func selectLiveAppForOrigin(liveApps []LiveAppSummary, appID string, origin string) (LiveAppSummary, bool) {
 	appID = strings.TrimSpace(appID)
 	origin = strings.TrimSpace(origin)
+	var byID LiveAppSummary
+	hasByID := false
 	if appID != "" {
 		for _, item := range liveApps {
 			if item.ID == appID {
-				return item, true
+				byID = item
+				hasByID = true
+				break
 			}
 		}
 	}
 	if origin != "" {
+		var best LiveAppSummary
+		hasBest := false
 		for _, item := range liveApps {
-			if strings.TrimSpace(item.Origin) == origin {
-				return item, true
+			if strings.TrimSpace(item.Origin) != origin {
+				continue
+			}
+			if !hasBest || liveAppSummaryRank(item) > liveAppSummaryRank(best) || (liveAppSummaryRank(item) == liveAppSummaryRank(best) && item.UpdatedAt > best.UpdatedAt) {
+				best = item
+				hasBest = true
 			}
 		}
+		if hasBest {
+			if hasByID && byID.ID == best.ID {
+				return byID, true
+			}
+			if hasByID && liveAppSummaryRank(byID) >= liveAppSummaryRank(best) {
+				return byID, true
+			}
+			return best, true
+		}
+	}
+	if hasByID {
+		return byID, true
 	}
 	return LiveAppSummary{}, false
+}
+
+func liveAppSummaryRank(item LiveAppSummary) int {
+	switch strings.TrimSpace(item.Status) {
+	case "ready":
+		return 4
+	case "starting":
+		return 3
+	case "failed":
+		return 2
+	case "stopped":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func chatDetailFromSession(session chat.Session) ChatDetail {
