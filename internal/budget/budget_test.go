@@ -378,6 +378,8 @@ func TestNewUsageEventCarriesPromptMinimizationAttribution(t *testing.T) {
 		RouteLocally:   true,
 	}, UsageContext{
 		ProjectRoot:                  "/tmp/demo",
+		ProviderModel:                "gpt-5.4",
+		ProviderSessionID:            "session-ctx-1",
 		BudgetModeSource:             "requested",
 		EnvironmentBudgetProfile:     "balanced",
 		ContextSource:                "ctx",
@@ -400,5 +402,11 @@ func TestNewUsageEventCarriesPromptMinimizationAttribution(t *testing.T) {
 	}
 	if event.ContextSource != "ctx" {
 		t.Fatalf("context source = %q, want ctx", event.ContextSource)
+	}
+	if event.ProviderModel != "gpt-5.4" {
+		t.Fatalf("provider model = %q, want gpt-5.4", event.ProviderModel)
+	}
+	if event.ProviderSessionID != "session-ctx-1" {
+		t.Fatalf("provider session id = %q, want session-ctx-1", event.ProviderSessionID)
 	}
 }

@@ -99,6 +99,8 @@ type UsageEvent struct {
 	ProjectRoot                  string         `json:"project_root,omitempty"`
 	Task                         string         `json:"task"`
 	Provider                     string         `json:"provider"`
+	ProviderModel                string         `json:"provider_model,omitempty"`
+	ProviderSessionID            string         `json:"provider_session_id,omitempty"`
 	BudgetMode                   Mode           `json:"budget_mode"`
 	BudgetModeSource             string         `json:"budget_mode_source,omitempty"`
 	EnvironmentBudgetProfile     string         `json:"environment_budget_profile,omitempty"`
@@ -128,6 +130,8 @@ type UsageEvent struct {
 
 type UsageContext struct {
 	ProjectRoot                  string
+	ProviderModel                string
+	ProviderSessionID            string
 	BudgetModeSource             string
 	EnvironmentBudgetProfile     string
 	ContextSource                string
@@ -610,6 +614,8 @@ func NewUsageEvent(runID string, req Request, assessment Assessment, usageCtx Us
 		ProjectRoot:                  usageCtx.ProjectRoot,
 		Task:                         req.Task,
 		Provider:                     req.Provider,
+		ProviderModel:                usageCtx.ProviderModel,
+		ProviderSessionID:            usageCtx.ProviderSessionID,
 		BudgetMode:                   assessment.Mode,
 		BudgetModeSource:             usageCtx.BudgetModeSource,
 		EnvironmentBudgetProfile:     usageCtx.EnvironmentBudgetProfile,

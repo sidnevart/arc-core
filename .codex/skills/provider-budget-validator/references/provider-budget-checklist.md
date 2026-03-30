@@ -13,5 +13,6 @@
 - Optional `.arc/budget/project_override.json` and `--budget-override-file` must appear in `budget_policy_resolution.json` and change the effective policy deterministically when present.
 - `budget_assessment.json` and run metadata must agree on `budget_mode_source`, `budget_project_override_present`, `budget_session_override_present`, and `budget_override_sources`.
 - `budget_assessment.json` must embed `prompt_minimization`, and `budget_usage_event.json` must mirror the same context-token/minimization fields.
+- `budget_usage_event.json` should also carry the real provider execution footprint when available, including `provider_model` and `provider_session_id`.
 - `arc budget show` and `arc budget override set|clear` must read/write the project override file without breaking subsequent run-time policy resolution.
 - `arc budget session write|show|clear` must round-trip a session override file cleanly, and a later `task run --budget-override-file` must reflect that file in `budget_policy_resolution.json`.

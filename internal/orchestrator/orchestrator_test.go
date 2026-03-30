@@ -43,6 +43,7 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 		Task:        "verify dry-run orchestration",
 		Mode:        "hero",
 		Provider:    "codex",
+		Model:       "gpt-5.4",
 		DryRun:      true,
 		RunChecks:   true,
 		UseProvider: false,
@@ -162,6 +163,13 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 	}
 	if _, ok := ctxMeta["reuse"]; !ok {
 		t.Fatalf("expected reuse in ctx metadata: %#v", ctxMeta)
+	}
+	var usageEvent map[string]any
+	if err := project.ReadJSON(run.Artifacts["budget_usage_event.json"], &usageEvent); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := usageEvent["provider_model"].(string); got != "gpt-5.4" {
+		t.Fatalf("provider_model = %q, want gpt-5.4", got)
 	}
 	var items []map[string]any
 	if err := project.ReadJSON(project.ProjectFile(root, "memory", "entries.json"), &items); err != nil {

@@ -152,6 +152,8 @@ Presets may declare a `budget_profile`, but they do not get to self-authorize ex
   - each run now persists `prompt_minimization.json`
   - `budget_assessment.json` embeds the same `prompt_minimization` payload
   - `budget_usage_event.json` and the global usage ledger now persist:
+    - `provider_model`
+    - `provider_session_id`
     - `project_root`
     - `budget_mode_source`
     - `environment_budget_profile`

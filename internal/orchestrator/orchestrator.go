@@ -213,6 +213,8 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 			BudgetMode:  string(effectiveBudgetMode),
 		}, *budgetAssessment, budget.UsageContext{
 			ProjectRoot:                  root,
+			ProviderModel:                opts.Model,
+			ProviderSessionID:            run.ProviderSessionID,
 			BudgetModeSource:             budgetModeSource,
 			EnvironmentBudgetProfile:     environmentBudgetProfile,
 			ContextSource:                contextSelection.SelectedSource,
