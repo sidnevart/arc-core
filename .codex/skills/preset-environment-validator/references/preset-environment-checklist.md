@@ -11,6 +11,7 @@
 - `task plan|run` emit `memory_policy.{json,md}` and ARC-managed memory writes use allowed runtime scopes.
 - Hook execution is audited into `hook_execution.{json,md}` and risky hooks block without approval.
 - `sandboxed_exec` hooks use the stricter bounded sandbox profile instead of inheriting the full parent shell environment.
+- sandboxed hook runs also emit `hook_sandbox_profile.{json,md}` with explicit env-key and memory-scope exposure details.
 - Missing declared hooks now have deterministic policy: required layers fail, overlay-scoped hooks can soft-skip with explicit audit status.
 - Hook-mediated memory writes go through `arc hook memory add`, respect `ARC_ALLOWED_MEMORY_SCOPES`, and append `hook_memory_events.jsonl` in the run directory.
 - User-facing preset metadata still shows stable name, tagline, and short description.

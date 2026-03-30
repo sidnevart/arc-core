@@ -30,6 +30,22 @@ type HookExecutionSummary struct {
 	Executions              []HookExecutionRecord `json:"executions,omitempty"`
 }
 
+type HookSandboxProfile struct {
+	RunID                string   `json:"run_id"`
+	HookName             string   `json:"hook_name"`
+	Lifecycle            string   `json:"lifecycle"`
+	PermissionScope      string   `json:"permission_scope"`
+	OwnerPresetID        string   `json:"owner_preset_id,omitempty"`
+	OwnerLayer           string   `json:"owner_layer,omitempty"`
+	SandboxDir           string   `json:"sandbox_dir"`
+	WorkingDirectory     string   `json:"working_directory"`
+	ParentEnvInherited   bool     `json:"parent_env_inherited"`
+	WorkspaceRootExposed bool     `json:"workspace_root_exposed"`
+	AllowedMemoryScopes  []string `json:"allowed_memory_scopes,omitempty"`
+	MemoryWritePath      string   `json:"memory_write_path,omitempty"`
+	EnvKeys              []string `json:"env_keys,omitempty"`
+}
+
 type HookExecutionRecord struct {
 	Name            string   `json:"name"`
 	Lifecycle       string   `json:"lifecycle"`
@@ -180,6 +196,12 @@ func executeHook(hooksDir string, hook ResolvedHook, runtimeCeiling string, opts
 		}
 		record.SandboxDir = sandboxDir
 		record.Notes = append(record.Notes, notes...)
+		profile := hookSandboxProfile(opts, hook, sandboxDir)
+		if err := persistHookSandboxProfile(opts.RunDir, profile); err != nil {
+			record.Status = "failed"
+			record.Error = err.Error()
+			return record, err
+		}
 		cmd.Dir = sandboxDir
 		cmd.Env = hookEnvironment(opts, hook, sandboxDir, true)
 	} else {
@@ -279,6 +301,40 @@ func hookEnvironment(opts HookRunOptions, hook ResolvedHook, sandboxDir string, 
 	return base
 }
 
+func hookSandboxProfile(opts HookRunOptions, hook ResolvedHook, sandboxDir string) HookSandboxProfile {
+	return HookSandboxProfile{
+		RunID:                opts.RunID,
+		HookName:             hook.Name,
+		Lifecycle:            hook.Lifecycle,
+		PermissionScope:      hook.PermissionScope,
+		OwnerPresetID:        hook.OwnerPresetID,
+		OwnerLayer:           hook.OwnerLayer,
+		SandboxDir:           sandboxDir,
+		WorkingDirectory:     sandboxDir,
+		ParentEnvInherited:   false,
+		WorkspaceRootExposed: true,
+		AllowedMemoryScopes:  append([]string{}, opts.AllowedMemoryScopes...),
+		MemoryWritePath:      "arc hook memory add",
+		EnvKeys: []string{
+			"PATH",
+			"HOME",
+			"TMPDIR",
+			"LANG",
+			"LC_ALL",
+			"ARC_WORKSPACE_ROOT",
+			"ARC_RUN_ID",
+			"ARC_RUN_DIR",
+			"ARC_HOOK_NAME",
+			"ARC_HOOK_LIFECYCLE",
+			"ARC_HOOK_OWNER_PRESET",
+			"ARC_RUNTIME_PERMISSION",
+			"ARC_ALLOWED_MEMORY_SCOPES",
+			"ARC_HOOK_MEMORY_ADD_CMD",
+			"ARC_HOOK_SANDBOX_DIR",
+		},
+	}
+}
+
 func fallbackEnv(key string, defaultValue string) string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -360,6 +416,21 @@ func persistHookExecutionSummary(runDir string, latest HookExecutionSummary) err
 	return project.WriteString(filepath.Join(runDir, "hook_execution.md"), RenderHookExecutionMarkdown(current))
 }
 
+func persistHookSandboxProfile(runDir string, latest HookSandboxProfile) error {
+	path := filepath.Join(runDir, "hook_sandbox_profile.json")
+	current := []HookSandboxProfile{}
+	if _, err := os.Stat(path); err == nil {
+		if err := project.ReadJSON(path, &current); err != nil {
+			return err
+		}
+	}
+	current = append(current, latest)
+	if err := project.WriteJSON(path, current); err != nil {
+		return err
+	}
+	return project.WriteString(filepath.Join(runDir, "hook_sandbox_profile.md"), renderHookSandboxProfilesMarkdown(current))
+}
+
 func RenderHookExecutionMarkdown(summary HookExecutionSummary) string {
 	var b strings.Builder
 	b.WriteString("# Hook Execution\n\n")
@@ -387,6 +458,33 @@ func RenderHookExecutionMarkdown(summary HookExecutionSummary) string {
 		}
 		if execution.StderrPath != "" {
 			b.WriteString("  - stderr: " + execution.StderrPath + "\n")
+		}
+	}
+	return b.String()
+}
+
+func renderHookSandboxProfilesMarkdown(profiles []HookSandboxProfile) string {
+	var b strings.Builder
+	b.WriteString("# Hook Sandbox Profiles\n\n")
+	if len(profiles) == 0 {
+		b.WriteString("No sandboxed hooks executed.\n")
+		return b.String()
+	}
+	for _, profile := range profiles {
+		b.WriteString(fmt.Sprintf("- %s (%s)\n", profile.HookName, profile.Lifecycle))
+		b.WriteString("  - permission_scope: " + profile.PermissionScope + "\n")
+		b.WriteString("  - sandbox_dir: " + profile.SandboxDir + "\n")
+		b.WriteString("  - working_directory: " + profile.WorkingDirectory + "\n")
+		b.WriteString(fmt.Sprintf("  - parent_env_inherited: %t\n", profile.ParentEnvInherited))
+		b.WriteString(fmt.Sprintf("  - workspace_root_exposed: %t\n", profile.WorkspaceRootExposed))
+		if len(profile.AllowedMemoryScopes) > 0 {
+			b.WriteString("  - allowed_memory_scopes: " + strings.Join(profile.AllowedMemoryScopes, ", ") + "\n")
+		}
+		if profile.MemoryWritePath != "" {
+			b.WriteString("  - memory_write_path: " + profile.MemoryWritePath + "\n")
+		}
+		if len(profile.EnvKeys) > 0 {
+			b.WriteString("  - env_keys: " + strings.Join(profile.EnvKeys, ", ") + "\n")
 		}
 	}
 	return b.String()

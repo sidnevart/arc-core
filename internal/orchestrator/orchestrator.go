@@ -1021,6 +1021,12 @@ func runHookLifecycle(root string, run *Run, resolution presets.EnvironmentResol
 	run.Artifacts["hook_execution.json"] = filepath.Join(runDir(root, run.ID), "hook_execution.json")
 	run.Artifacts["hook_execution.md"] = filepath.Join(runDir(root, run.ID), "hook_execution.md")
 	run.Artifacts["hook_memory_events.jsonl"] = filepath.Join(runDir(root, run.ID), "hook_memory_events.jsonl")
+	if _, statErr := os.Stat(filepath.Join(runDir(root, run.ID), "hook_sandbox_profile.json")); statErr == nil {
+		run.Artifacts["hook_sandbox_profile.json"] = filepath.Join(runDir(root, run.ID), "hook_sandbox_profile.json")
+	}
+	if _, statErr := os.Stat(filepath.Join(runDir(root, run.ID), "hook_sandbox_profile.md")); statErr == nil {
+		run.Artifacts["hook_sandbox_profile.md"] = filepath.Join(runDir(root, run.ID), "hook_sandbox_profile.md")
+	}
 	if len(summary.Executions) > 0 {
 		run.Metadata["hook_last_lifecycle"] = lifecycle
 		run.Metadata["hook_execution_count"] = fmt.Sprintf("%d", len(summary.Executions))

@@ -137,6 +137,7 @@ Current implementation update:
 - runs now also materialize `memory_policy.{json,md}` so runtime-visible allowed scopes are explicit
 - the first hook runner now executes approved lifecycle hooks from `.arc/hooks/` with timeout and permission/approval gates
 - hook execution is auditable via `hook_execution.{json,md}`
+- sandboxed hook runs now also emit `hook_sandbox_profile.{json,md}` so the bounded execution profile is inspectable after the fact
 - `risky_exec_requires_approval` hooks now block runs until approval instead of being advisory metadata only
 - ARC-managed memory persistence now uses canonical `runs/<run-id>` scopes and is checked against the resolved allowlist before write
 - `sandboxed_exec` is now a stricter bounded sandbox profile, not just a label:
@@ -144,6 +145,7 @@ Current implementation update:
   - the environment is sanitized instead of inheriting the full parent shell
   - `ARC_HOOK_SANDBOX_DIR` is exposed explicitly
   - only `.sh` / `.bash` hook scripts are allowed in this mode
+  - a separate sandbox profile artifact records the working directory, env-key allowlist, allowed memory scopes, and the mediated memory-write path for each sandboxed hook execution
 - hook-side memory writes now have a mediated path:
   - hooks can call `arc hook memory add`
   - the command validates scope against `ARC_ALLOWED_MEMORY_SCOPES`

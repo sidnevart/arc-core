@@ -78,6 +78,19 @@ func TestExecuteHooksSandboxedExecUsesDedicatedSandbox(t *testing.T) {
 	if !strings.Contains(stdout, "workspace="+workspace) {
 		t.Fatalf("expected workspace root env to be exposed, got %q", stdout)
 	}
+	var profiles []HookSandboxProfile
+	if err := project.ReadJSON(filepath.Join(runDir, "hook_sandbox_profile.json"), &profiles); err != nil {
+		t.Fatal(err)
+	}
+	if len(profiles) != 1 {
+		t.Fatalf("expected one sandbox profile, got %#v", profiles)
+	}
+	if !profiles[0].WorkspaceRootExposed || profiles[0].ParentEnvInherited {
+		t.Fatalf("unexpected sandbox profile: %#v", profiles[0])
+	}
+	if profiles[0].MemoryWritePath != "arc hook memory add" {
+		t.Fatalf("memory write path = %q, want arc hook memory add", profiles[0].MemoryWritePath)
+	}
 }
 
 func TestExecuteHooksSkipsMissingOverlayHook(t *testing.T) {
