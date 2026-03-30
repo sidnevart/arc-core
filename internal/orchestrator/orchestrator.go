@@ -1062,6 +1062,9 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 		"memory_boost":         ctxResult.MemoryBoost,
 		"memory_trust_bonus":   ctxResult.MemoryTrustBonus,
 		"memory_recency_bonus": ctxResult.MemoryRecencyBonus,
+		"section_provenance":   ctxResult.SectionProvenance,
+		"accounting":           ctxResult.Accounting,
+		"reuse":                ctxResult.Reuse,
 		"pack_json":            ctxResult.PackJSONPath,
 		"pack_md":              ctxResult.PackMDPath,
 		"metadata":             ctxResult.MetadataPath,
@@ -1089,6 +1092,10 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 	run.Metadata["context_ctx_memory_boost"] = fmt.Sprintf("%d", selection.CtxMemoryBoost)
 	run.Metadata["context_ctx_memory_trust_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryTrustBonus)
 	run.Metadata["context_ctx_memory_recency_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryRecencyBonus)
+	run.Metadata["context_ctx_candidate_total"] = fmt.Sprintf("%d", ctxResult.Accounting.CandidateTotal)
+	run.Metadata["context_ctx_selected_total"] = fmt.Sprintf("%d", ctxResult.Accounting.SelectedTotal)
+	run.Metadata["context_ctx_index_source"] = ctxResult.Reuse.IndexSource
+	run.Metadata["context_ctx_reused_artifact_count"] = fmt.Sprintf("%d", ctxResult.Reuse.ReusedArtifactCount)
 	run.Metadata["context_selection_reason"] = selection.SelectionReason
 	return saveRun(root, run)
 }

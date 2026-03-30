@@ -134,6 +134,7 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
   - `context_ctx_quality`
   - `context_selection_reason`
 - `ctx_context_metadata.json` also stores first retrieval-quality signals:
+- `ctx_context_metadata.json` now also stores section-level provenance and candidate-vs-final accounting:
   - `quality_score`
   - `term_coverage`
   - `matched_sections`
@@ -142,6 +143,8 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
   - `memory_boost`
   - `memory_trust_bonus`
   - `memory_recency_bonus`
+  - `section_provenance`
+  - `accounting`
 - `.context/memory` now already participates in provider-facing assembly:
   - `ctx assemble` reads saved memory entries,
   - matching entries appear in `Relevant Memory`,
@@ -165,6 +168,14 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
   - docs are scored more heavily on title and heading coverage, not only path hits
   - files are scored more heavily on basename and multi-term path coverage
   - symbols are scored more heavily on symbol-name matches than on path-only hits
+- a later provenance slice on 2026-03-30 made the retrieval path more inspectable:
+  - `ctx assemble` metadata now records per-section provenance with `source_paths`, `candidate_count`, and `selected_count`
+  - `ctx bench` summaries now compare baseline vs optimized candidate-vs-final totals
+  - ARC run metadata now mirrors `context_ctx_candidate_total` and `context_ctx_selected_total` so selection pressure is visible without opening the full standalone artifact
+- a later reuse-evidence slice on 2026-03-30 made cache behavior inspectable too:
+  - `ctx assemble` metadata now persists `reuse.index_source`, `reuse.memory_source`, and `reuse.reused_artifact_count`
+  - `ctx bench` summaries now mirror the same reuse source fields so baseline-vs-optimized comparisons can distinguish retrieval quality from artifact reuse
+  - ARC run metadata now mirrors `context_ctx_index_source` and `context_ctx_reused_artifact_count` so top-level run inspection can explain whether `ctx` reused stable standalone artifacts or rebuilt them for the selected pack
 
 ## Verification
 
@@ -180,3 +191,4 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
 - a later smoke on the same task after the doc/code ranking refinement confirmed that the optimized pack is now also more discriminative at the surface-selection layer: `.context/benchmarks/20260329T222330Z/optimized_pack.json` elevated the preset-environment docs/code set more cleanly, and `.arc/runs/20260329T222331Z-352551000/run.json` still selected `ctx` while preserving the same memory-aware metadata contract.
 - a later smoke on 2026-03-30 confirmed the first operator-support slice too: `ctx doctor --path . --json` reported a healthy `.context/` workspace with self-indexing excluded, `ctx memory status --path . --json` exposed stable artifact paths plus counts, `ctx memory search --path . --json "preset environment"` returned deterministic matches from `.context/memory/entries.json`, and `ctx memory compact --path . --json` preserved the same artifact contract while applying stale-marking rules.
 - a later smoke on 2026-03-30 confirmed the first managed-config slice too: `ctx init --path .` ensured `.context-tool.yaml` exists, `ctx doctor --path . --json` reported `config_path` plus the resolved human config, `ctx index build --path .` respected the config-driven include/exclude/docs filters, and both `ctx assemble --json ...` and `ctx bench --json ...` persisted `config_path` + `human_config` in their result metadata.
+- a later smoke on 2026-03-30 confirmed the first reuse-evidence slice too: `.context/artifacts/assemble/20260330T203305Z/metadata.json` recorded `reuse.index_source=reused_existing`, `reuse.memory_source=reused_existing`, and `reuse.reused_artifact_count=2`; `.context/benchmarks/20260330T203302Z/summary.json` mirrored the same reuse summary fields; and `.arc/runs/20260330T203303Z-771727000/run.json` surfaced `context_ctx_index_source=reused_existing` plus `context_ctx_reused_artifact_count=2` without needing to open the full standalone artifact.

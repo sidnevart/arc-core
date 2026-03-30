@@ -97,6 +97,32 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 	if got := run.Metadata["context_selection_reason"]; got == "" {
 		t.Fatal("expected context_selection_reason metadata to be populated")
 	}
+	if got := run.Metadata["context_ctx_candidate_total"]; got == "" {
+		t.Fatal("expected context_ctx_candidate_total metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_selected_total"]; got == "" {
+		t.Fatal("expected context_ctx_selected_total metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_index_source"]; got == "" {
+		t.Fatal("expected context_ctx_index_source metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_reused_artifact_count"]; got == "" {
+		t.Fatal("expected context_ctx_reused_artifact_count metadata to be populated")
+	}
+
+	var ctxMeta map[string]any
+	if err := project.ReadJSON(run.Artifacts["ctx_context_metadata.json"], &ctxMeta); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ctxMeta["section_provenance"]; !ok {
+		t.Fatalf("expected section_provenance in ctx metadata: %#v", ctxMeta)
+	}
+	if _, ok := ctxMeta["accounting"]; !ok {
+		t.Fatalf("expected accounting in ctx metadata: %#v", ctxMeta)
+	}
+	if _, ok := ctxMeta["reuse"]; !ok {
+		t.Fatalf("expected reuse in ctx metadata: %#v", ctxMeta)
+	}
 	var items []map[string]any
 	if err := project.ReadJSON(project.ProjectFile(root, "memory", "entries.json"), &items); err != nil {
 		t.Fatal(err)

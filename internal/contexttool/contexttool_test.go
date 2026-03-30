@@ -1,6 +1,7 @@
 package contexttool
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -200,6 +201,26 @@ func TestAssembleWritesArtifacts(t *testing.T) {
 	if result.TermCoverage <= 0 {
 		t.Fatalf("expected positive term coverage")
 	}
+	var meta assembleMetadata
+	data, err := os.ReadFile(result.MetadataPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if len(meta.SectionProvenance) == 0 {
+		t.Fatalf("expected section provenance metadata")
+	}
+	if meta.Accounting.CandidateTotal <= 0 || meta.Accounting.SelectedTotal <= 0 {
+		t.Fatalf("expected positive accounting totals: %#v", meta.Accounting)
+	}
+	if meta.Accounting.CandidateDocs < meta.Accounting.SelectedDocs {
+		t.Fatalf("candidate docs should be >= selected docs: %#v", meta.Accounting)
+	}
+	if meta.Reuse.IndexSource == "" || meta.Reuse.MemorySource == "" {
+		t.Fatalf("expected reuse summary in metadata: %#v", meta.Reuse)
+	}
 }
 
 func TestResolveRootDiscoversWorkspaceFromNestedDir(t *testing.T) {
@@ -246,6 +267,15 @@ func TestBenchWritesComparisonArtifacts(t *testing.T) {
 	}
 	if result.Summary.BaselineApproxTokens == 0 || result.Summary.OptimizedApproxTokens == 0 {
 		t.Fatalf("expected non-zero token counts in benchmark summary")
+	}
+	if result.Summary.BaselineCandidateTotal <= 0 || result.Summary.OptimizedCandidateTotal <= 0 {
+		t.Fatalf("expected candidate totals in benchmark summary: %#v", result.Summary)
+	}
+	if result.Summary.OptimizedCandidateTotal < result.Summary.OptimizedSelectedTotal {
+		t.Fatalf("optimized candidate total should be >= selected total: %#v", result.Summary)
+	}
+	if result.Reuse.IndexSource == "" || result.Summary.ReuseIndexSource == "" {
+		t.Fatalf("expected reuse evidence in bench result: %#v / %#v", result.Reuse, result.Summary)
 	}
 }
 
@@ -516,11 +546,11 @@ func TestRenderRelevantCodePrefersMatchingSymbolName(t *testing.T) {
 		},
 	}
 	rendered := renderRelevantCode(idx, []string{"preset", "environment", "rules"})
-	if !strings.Contains(rendered, "ApplyPresetEnvironmentRules") {
-		t.Fatalf("expected matching symbol to appear in rendered code surfaces: %s", rendered)
+	if !strings.Contains(rendered.Content, "ApplyPresetEnvironmentRules") {
+		t.Fatalf("expected matching symbol to appear in rendered code surfaces: %s", rendered.Content)
 	}
-	if strings.Index(rendered, "ApplyPresetEnvironmentRules") > strings.Index(rendered, "HandleStuff") && strings.Contains(rendered, "HandleStuff") {
-		t.Fatalf("expected stronger symbol match to rank ahead of weak symbol match: %s", rendered)
+	if strings.Index(rendered.Content, "ApplyPresetEnvironmentRules") > strings.Index(rendered.Content, "HandleStuff") && strings.Contains(rendered.Content, "HandleStuff") {
+		t.Fatalf("expected stronger symbol match to rank ahead of weak symbol match: %s", rendered.Content)
 	}
 }
 

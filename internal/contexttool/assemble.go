@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -16,43 +17,84 @@ import (
 )
 
 type AssembleResult struct {
-	OutputDir          string           `json:"output_dir"`
-	PackJSONPath       string           `json:"pack_json_path"`
-	PackMDPath         string           `json:"pack_md_path"`
-	MetadataPath       string           `json:"metadata_path"`
-	Pack               contextpack.Pack `json:"pack"`
-	BuiltIndex         bool             `json:"built_index"`
-	MatchedTerms       []string         `json:"matched_terms"`
-	QualityScore       int              `json:"quality_score"`
-	TermCoverage       int              `json:"term_coverage"`
-	MatchedSections    []string         `json:"matched_sections"`
-	MemoryMatchCount   int              `json:"memory_match_count"`
-	MatchedMemoryIDs   []string         `json:"matched_memory_ids"`
-	MemoryBoost        int              `json:"memory_boost"`
-	MemoryTrustBonus   int              `json:"memory_trust_bonus"`
-	MemoryRecencyBonus int              `json:"memory_recency_bonus"`
-	ConfigPath         string           `json:"config_path"`
-	HumanConfig        HumanConfig      `json:"human_config"`
+	OutputDir          string              `json:"output_dir"`
+	PackJSONPath       string              `json:"pack_json_path"`
+	PackMDPath         string              `json:"pack_md_path"`
+	MetadataPath       string              `json:"metadata_path"`
+	Pack               contextpack.Pack    `json:"pack"`
+	BuiltIndex         bool                `json:"built_index"`
+	MatchedTerms       []string            `json:"matched_terms"`
+	QualityScore       int                 `json:"quality_score"`
+	TermCoverage       int                 `json:"term_coverage"`
+	MatchedSections    []string            `json:"matched_sections"`
+	MemoryMatchCount   int                 `json:"memory_match_count"`
+	MatchedMemoryIDs   []string            `json:"matched_memory_ids"`
+	MemoryBoost        int                 `json:"memory_boost"`
+	MemoryTrustBonus   int                 `json:"memory_trust_bonus"`
+	MemoryRecencyBonus int                 `json:"memory_recency_bonus"`
+	ConfigPath         string              `json:"config_path"`
+	HumanConfig        HumanConfig         `json:"human_config"`
+	SectionProvenance  []SectionProvenance `json:"section_provenance,omitempty"`
+	Accounting         RetrievalAccounting `json:"accounting"`
+	Reuse              ReuseSummary        `json:"reuse"`
+}
+
+type SectionProvenance struct {
+	Title          string   `json:"title"`
+	Source         string   `json:"source"`
+	SourcePaths    []string `json:"source_paths,omitempty"`
+	CandidateCount int      `json:"candidate_count"`
+	SelectedCount  int      `json:"selected_count"`
+	Truncated      bool     `json:"truncated,omitempty"`
+	Notes          []string `json:"notes,omitempty"`
+}
+
+type RetrievalAccounting struct {
+	CandidateTotal   int `json:"candidate_total"`
+	SelectedTotal    int `json:"selected_total"`
+	CandidateDocs    int `json:"candidate_docs"`
+	SelectedDocs     int `json:"selected_docs"`
+	CandidateFiles   int `json:"candidate_files"`
+	SelectedFiles    int `json:"selected_files"`
+	CandidateSymbols int `json:"candidate_symbols"`
+	SelectedSymbols  int `json:"selected_symbols"`
+	CandidateChanges int `json:"candidate_changes"`
+	SelectedChanges  int `json:"selected_changes"`
+	CandidateMemory  int `json:"candidate_memory"`
+	SelectedMemory   int `json:"selected_memory"`
+}
+
+type ReuseSummary struct {
+	IndexBundlePath     string `json:"index_bundle_path"`
+	IndexSource         string `json:"index_source"`
+	IndexReused         bool   `json:"index_reused"`
+	MemoryEntriesPath   string `json:"memory_entries_path"`
+	MemorySource        string `json:"memory_source"`
+	MemoryEntriesCount  int    `json:"memory_entries_count"`
+	ReusedArtifactCount int    `json:"reused_artifact_count"`
 }
 
 type assembleMetadata struct {
-	Task                 string      `json:"task"`
-	GeneratedAt          string      `json:"generated_at"`
-	MatchedTerms         []string    `json:"matched_terms"`
-	BuiltIndex           bool        `json:"built_index"`
-	IndexPath            string      `json:"index_path"`
-	MemoryPath           string      `json:"memory_path"`
-	Sections             []string    `json:"sections"`
-	QualityScore         int         `json:"quality_score"`
-	TermCoverage         int         `json:"term_coverage"`
-	MatchedSectionTitles []string    `json:"matched_section_titles"`
-	MemoryMatchCount     int         `json:"memory_match_count"`
-	MatchedMemoryIDs     []string    `json:"matched_memory_ids"`
-	MemoryBoost          int         `json:"memory_boost"`
-	MemoryTrustBonus     int         `json:"memory_trust_bonus"`
-	MemoryRecencyBonus   int         `json:"memory_recency_bonus"`
-	ConfigPath           string      `json:"config_path"`
-	HumanConfig          HumanConfig `json:"human_config"`
+	Task                 string              `json:"task"`
+	GeneratedAt          string              `json:"generated_at"`
+	MatchedTerms         []string            `json:"matched_terms"`
+	BuiltIndex           bool                `json:"built_index"`
+	IndexPath            string              `json:"index_path"`
+	MemoryPath           string              `json:"memory_path"`
+	Sections             []string            `json:"sections"`
+	QualityScore         int                 `json:"quality_score"`
+	TermCoverage         int                 `json:"term_coverage"`
+	MatchedSectionTitles []string            `json:"matched_section_titles"`
+	MemoryMatchCount     int                 `json:"memory_match_count"`
+	MatchedMemoryIDs     []string            `json:"matched_memory_ids"`
+	MemoryBoost          int                 `json:"memory_boost"`
+	MemoryTrustBonus     int                 `json:"memory_trust_bonus"`
+	MemoryRecencyBonus   int                 `json:"memory_recency_bonus"`
+	ConfigPath           string              `json:"config_path"`
+	HumanConfig          HumanConfig         `json:"human_config"`
+	SectionProvenance    []SectionProvenance `json:"section_provenance,omitempty"`
+	Accounting           RetrievalAccounting `json:"accounting"`
+	Reuse                ReuseSummary        `json:"reuse"`
 }
 
 type retrievalSummary struct {
@@ -64,6 +106,8 @@ type retrievalSummary struct {
 	MemoryBoost        int
 	MemoryTrustBonus   int
 	MemoryRecencyBonus int
+	SectionProvenance  []SectionProvenance
+	Accounting         RetrievalAccounting
 }
 
 type memoryCandidate struct {
@@ -73,8 +117,16 @@ type memoryCandidate struct {
 	item         memory.Item
 }
 
+type renderedSection struct {
+	Content        string
+	CandidateCount int
+	SelectedCount  int
+	SourcePaths    []string
+	Notes          []string
+}
+
 func Assemble(root string, task string) (AssembleResult, error) {
-	idx, items, builtIndex, err := ensureIndexAndMemory(root)
+	idx, items, builtIndex, reuse, err := ensureIndexAndMemory(root)
 	if err != nil {
 		return AssembleResult{}, err
 	}
@@ -123,6 +175,9 @@ func Assemble(root string, task string) (AssembleResult, error) {
 		MemoryRecencyBonus:   summary.MemoryRecencyBonus,
 		ConfigPath:           HumanConfigPath(root),
 		HumanConfig:          cfg,
+		SectionProvenance:    summary.SectionProvenance,
+		Accounting:           summary.Accounting,
+		Reuse:                reuse,
 	}
 	if err := project.WriteJSON(metaPath, meta); err != nil {
 		return AssembleResult{}, err
@@ -146,6 +201,9 @@ func Assemble(root string, task string) (AssembleResult, error) {
 		MemoryRecencyBonus: summary.MemoryRecencyBonus,
 		ConfigPath:         HumanConfigPath(root),
 		HumanConfig:        cfg,
+		SectionProvenance:  summary.SectionProvenance,
+		Accounting:         summary.Accounting,
+		Reuse:              reuse,
 	}, nil
 }
 
@@ -163,14 +221,18 @@ func loadMemory(root string) ([]memory.Item, error) {
 
 func buildPack(task string, idx indexer.Result, items []memory.Item, terms []string) (contextpack.Pack, retrievalSummary) {
 	sections := []contextpack.Section{}
+	provenance := []SectionProvenance{}
+	accounting := RetrievalAccounting{}
 	memoryMatches := selectRelevantMemory(items, terms)
-	add := func(title string, source string, content string, maxChars int) {
-		content = strings.TrimSpace(content)
+	add := func(title string, source string, rendered renderedSection, maxChars int) {
+		content := strings.TrimSpace(rendered.Content)
 		if content == "" {
 			return
 		}
+		truncated := false
 		if len(content) > maxChars {
 			content = strings.TrimSpace(content[:maxChars]) + "\n...[truncated]"
+			truncated = true
 		}
 		sections = append(sections, contextpack.Section{
 			Title:        title,
@@ -178,16 +240,46 @@ func buildPack(task string, idx indexer.Result, items []memory.Item, terms []str
 			Content:      content,
 			ApproxTokens: len(content) / 4,
 		})
+		provenance = append(provenance, SectionProvenance{
+			Title:          title,
+			Source:         source,
+			SourcePaths:    rendered.SourcePaths,
+			CandidateCount: rendered.CandidateCount,
+			SelectedCount:  rendered.SelectedCount,
+			Truncated:      truncated,
+			Notes:          rendered.Notes,
+		})
+		accounting.CandidateTotal += rendered.CandidateCount
+		accounting.SelectedTotal += rendered.SelectedCount
 	}
 
-	add("Task Brief", "task", task, 1500*4)
-	add("Query Signals", "task analysis", renderQuerySignals(task, terms), 600*4)
-	add("Relevant Docs", ".context/index/docs.json", renderRelevantDocs(idx, terms), 1800*4)
-	add("Relevant Code Surfaces", ".context/index/{files,symbols}.json", renderRelevantCode(idx, terms), 1800*4)
-	add("Recent Changes", ".context/index/recent_changes.json", renderRecentChanges(idx), 1200*4)
-	add("Relevant Memory", ".context/memory/entries.json", renderRelevantMemory(memoryMatches), 1200*4)
-	add("Index Summary", ".context/index/bundle.json", renderIndexSummary(idx), 2500*4)
-	add("Memory Summary", ".context/memory/entries.json", renderMemorySummary(items), 800*4)
+	add("Task Brief", "task", renderedSection{Content: task, CandidateCount: 1, SelectedCount: 1, Notes: []string{"user task input"}}, 1500*4)
+	add("Query Signals", "task analysis", renderedSection{Content: renderQuerySignals(task, terms), CandidateCount: max(1, len(terms)), SelectedCount: max(1, len(terms))}, 600*4)
+
+	docsRendered := renderRelevantDocs(idx, terms)
+	accounting.CandidateDocs = docsRendered.CandidateCount
+	accounting.SelectedDocs = docsRendered.SelectedCount
+	add("Relevant Docs", ".context/index/docs.json", docsRendered, 1800*4)
+
+	codeRendered := renderRelevantCode(idx, terms)
+	accounting.CandidateFiles = countNoteValue(codeRendered.Notes, "candidate_files")
+	accounting.SelectedFiles = countNoteValue(codeRendered.Notes, "selected_files")
+	accounting.CandidateSymbols = countNoteValue(codeRendered.Notes, "candidate_symbols")
+	accounting.SelectedSymbols = countNoteValue(codeRendered.Notes, "selected_symbols")
+	add("Relevant Code Surfaces", ".context/index/{files,symbols}.json", codeRendered, 1800*4)
+
+	changesRendered := renderRecentChanges(idx)
+	accounting.CandidateChanges = changesRendered.CandidateCount
+	accounting.SelectedChanges = changesRendered.SelectedCount
+	add("Recent Changes", ".context/index/recent_changes.json", changesRendered, 1200*4)
+
+	memoryRendered := renderRelevantMemory(memoryMatches)
+	accounting.CandidateMemory = memoryRendered.CandidateCount
+	accounting.SelectedMemory = memoryRendered.SelectedCount
+	add("Relevant Memory", ".context/memory/entries.json", memoryRendered, 1200*4)
+
+	add("Index Summary", ".context/index/bundle.json", renderedSection{Content: renderIndexSummary(idx), CandidateCount: 1, SelectedCount: 1, SourcePaths: []string{".context/index/bundle.json"}}, 2500*4)
+	add("Memory Summary", ".context/memory/entries.json", renderedSection{Content: renderMemorySummary(items), CandidateCount: len(items), SelectedCount: min(10, len(items)), SourcePaths: []string{".context/memory/entries.json"}}, 800*4)
 
 	total := 0
 	for _, section := range sections {
@@ -201,7 +293,7 @@ func buildPack(task string, idx indexer.Result, items []memory.Item, terms []str
 		ApproxTokens: total,
 		Sections:     sections,
 	}
-	return pack, summarizePack(pack, terms, memoryMatches)
+	return pack, summarizePack(pack, terms, memoryMatches, provenance, accounting)
 }
 
 func renderQuerySignals(task string, terms []string) string {
@@ -219,7 +311,7 @@ func renderQuerySignals(task string, terms []string) string {
 	return strings.TrimSpace(b.String())
 }
 
-func renderRelevantDocs(idx indexer.Result, terms []string) string {
+func renderRelevantDocs(idx indexer.Result, terms []string) renderedSection {
 	type candidate struct {
 		score int
 		doc   indexer.DocEntry
@@ -242,12 +334,19 @@ func renderRelevantDocs(idx indexer.Result, terms []string) string {
 		return candidates[i].score > candidates[j].score
 	})
 	if len(candidates) == 0 {
-		return "No strongly matching docs found in the current index."
+		return renderedSection{
+			Content:        "No strongly matching docs found in the current index.",
+			SourcePaths:    []string{".context/index/docs.json"},
+			CandidateCount: 0,
+			SelectedCount:  0,
+		}
 	}
 	var b strings.Builder
 	limit := min(8, len(candidates))
+	sourcePaths := make([]string, 0, limit)
 	for i := 0; i < limit; i++ {
 		doc := candidates[i].doc
+		sourcePaths = append(sourcePaths, doc.Path)
 		b.WriteString(fmt.Sprintf("- %s — %s\n", doc.Path, doc.Title))
 		for _, heading := range doc.Headings {
 			if strings.TrimSpace(heading) == "" {
@@ -257,10 +356,15 @@ func renderRelevantDocs(idx indexer.Result, terms []string) string {
 			break
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return renderedSection{
+		Content:        strings.TrimSpace(b.String()),
+		CandidateCount: len(candidates),
+		SelectedCount:  limit,
+		SourcePaths:    sourcePaths,
+	}
 }
 
-func renderRelevantCode(idx indexer.Result, terms []string) string {
+func renderRelevantCode(idx indexer.Result, terms []string) renderedSection {
 	type scoredFile struct {
 		score int
 		file  indexer.FileEntry
@@ -310,12 +414,21 @@ func renderRelevantCode(idx indexer.Result, terms []string) string {
 	})
 	var b strings.Builder
 	if len(files) == 0 && len(symbols) == 0 {
-		return "No strongly matching code surfaces found in the current index."
+		return renderedSection{
+			Content:        "No strongly matching code surfaces found in the current index.",
+			SourcePaths:    []string{".context/index/files.json", ".context/index/symbols.json"},
+			CandidateCount: 0,
+			SelectedCount:  0,
+		}
 	}
+	sourcePaths := []string{}
+	selectedFiles := min(10, len(files))
+	selectedSymbols := min(10, len(symbols))
 	if len(files) > 0 {
 		b.WriteString("Files:\n")
-		for i := 0; i < min(10, len(files)); i++ {
+		for i := 0; i < selectedFiles; i++ {
 			file := files[i].file
+			sourcePaths = append(sourcePaths, file.Path)
 			b.WriteString(fmt.Sprintf("- %s (%s)\n", file.Path, file.Kind))
 		}
 	}
@@ -324,36 +437,72 @@ func renderRelevantCode(idx indexer.Result, terms []string) string {
 			b.WriteString("\n")
 		}
 		b.WriteString("Symbols:\n")
-		for i := 0; i < min(10, len(symbols)); i++ {
+		for i := 0; i < selectedSymbols; i++ {
 			symbol := symbols[i].symbol
+			sourcePaths = append(sourcePaths, fmt.Sprintf("%s:%s", symbol.Path, symbol.Name))
 			b.WriteString(fmt.Sprintf("- %s (%s) in %s:%d\n", symbol.Name, symbol.Kind, symbol.Path, symbol.Line))
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return renderedSection{
+		Content:        strings.TrimSpace(b.String()),
+		CandidateCount: len(files) + len(symbols),
+		SelectedCount:  selectedFiles + selectedSymbols,
+		SourcePaths:    sourcePaths,
+		Notes: []string{
+			fmt.Sprintf("candidate_files=%d", len(files)),
+			fmt.Sprintf("selected_files=%d", selectedFiles),
+			fmt.Sprintf("candidate_symbols=%d", len(symbols)),
+			fmt.Sprintf("selected_symbols=%d", selectedSymbols),
+		},
+	}
 }
 
-func renderRecentChanges(idx indexer.Result) string {
+func renderRecentChanges(idx indexer.Result) renderedSection {
 	if len(idx.Recent) == 0 {
-		return "No git history captured in the current index."
+		return renderedSection{
+			Content:        "No git history captured in the current index.",
+			SourcePaths:    []string{".context/index/recent_changes.json"},
+			CandidateCount: 0,
+			SelectedCount:  0,
+		}
 	}
 	var b strings.Builder
-	for i := 0; i < min(10, len(idx.Recent)); i++ {
+	limit := min(10, len(idx.Recent))
+	for i := 0; i < limit; i++ {
 		change := idx.Recent[i]
 		b.WriteString(fmt.Sprintf("- %s %s %s\n", change.Hash, change.Date, change.Subject))
 	}
-	return strings.TrimSpace(b.String())
+	return renderedSection{
+		Content:        strings.TrimSpace(b.String()),
+		CandidateCount: len(idx.Recent),
+		SelectedCount:  limit,
+		SourcePaths:    []string{".context/index/recent_changes.json"},
+	}
 }
 
-func renderRelevantMemory(candidates []memoryCandidate) string {
+func renderRelevantMemory(candidates []memoryCandidate) renderedSection {
 	if len(candidates) == 0 {
-		return "No context-tool memory entries yet."
+		return renderedSection{
+			Content:        "No context-tool memory entries yet.",
+			SourcePaths:    []string{".context/memory/entries.json"},
+			CandidateCount: 0,
+			SelectedCount:  0,
+		}
 	}
 	var b strings.Builder
-	for i := 0; i < min(8, len(candidates)); i++ {
+	limit := min(8, len(candidates))
+	sourcePaths := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
 		item := candidates[i].item
+		sourcePaths = append(sourcePaths, item.ID)
 		b.WriteString(fmt.Sprintf("- %s [%s/%s]: %s\n", item.ID, item.Kind, item.Status, item.Summary))
 	}
-	return strings.TrimSpace(b.String())
+	return renderedSection{
+		Content:        strings.TrimSpace(b.String()),
+		CandidateCount: len(candidates),
+		SelectedCount:  limit,
+		SourcePaths:    sourcePaths,
+	}
 }
 
 func selectRelevantMemory(items []memory.Item, terms []string) []memoryCandidate {
@@ -503,7 +652,7 @@ func coverageBonus(text string, terms []string, unit int) int {
 	return covered * unit
 }
 
-func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memoryCandidate) retrievalSummary {
+func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memoryCandidate, provenance []SectionProvenance, accounting RetrievalAccounting) retrievalSummary {
 	if len(terms) == 0 {
 		memBoost, trustBonus, recencyBonus := memoryBonuses(memoryMatches)
 		return retrievalSummary{
@@ -513,6 +662,8 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 			MemoryBoost:        memBoost,
 			MemoryTrustBonus:   trustBonus,
 			MemoryRecencyBonus: recencyBonus,
+			SectionProvenance:  provenance,
+			Accounting:         accounting,
 		}
 	}
 	lowerSections := make([]string, 0, len(pack.Sections))
@@ -563,7 +714,24 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 		MemoryBoost:        memBoost,
 		MemoryTrustBonus:   trustBonus,
 		MemoryRecencyBonus: recencyBonus,
+		SectionProvenance:  provenance,
+		Accounting:         accounting,
 	}
+}
+
+func countNoteValue(notes []string, prefix string) int {
+	for _, note := range notes {
+		if !strings.HasPrefix(note, prefix+"=") {
+			continue
+		}
+		value := strings.TrimPrefix(note, prefix+"=")
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return 0
+		}
+		return parsed
+	}
+	return 0
 }
 
 func scoreMemoryItem(item memory.Item, terms []string, now time.Time) memoryCandidate {

@@ -21,6 +21,7 @@ type BenchResult struct {
 	Summary       BenchSummary     `json:"summary"`
 	BuiltIndex    bool             `json:"built_index"`
 	MatchedTerms  []string         `json:"matched_terms"`
+	Reuse         ReuseSummary     `json:"reuse"`
 	SummaryPath   string           `json:"summary_path"`
 	BaselineMD    string           `json:"baseline_md_path"`
 	OptimizedMD   string           `json:"optimized_md_path"`
@@ -44,18 +45,24 @@ type BenchSummary struct {
 	OptimizedMemoryMatches      int      `json:"optimized_memory_matches"`
 	OptimizedMemoryTrustBonus   int      `json:"optimized_memory_trust_bonus"`
 	OptimizedMemoryRecencyBonus int      `json:"optimized_memory_recency_bonus"`
+	BaselineCandidateTotal      int      `json:"baseline_candidate_total"`
+	BaselineSelectedTotal       int      `json:"baseline_selected_total"`
+	OptimizedCandidateTotal     int      `json:"optimized_candidate_total"`
+	OptimizedSelectedTotal      int      `json:"optimized_selected_total"`
+	ReuseIndexSource            string   `json:"reuse_index_source"`
+	ReuseMemorySource           string   `json:"reuse_memory_source"`
+	ReuseArtifactCount          int      `json:"reuse_artifact_count"`
 	Recommendation              string   `json:"recommendation"`
 }
 
 func Bench(root string, task string) (BenchResult, error) {
-	idx, items, builtIndex, err := ensureIndexAndMemory(root)
+	idx, items, builtIndex, reuse, err := ensureIndexAndMemory(root)
 	if err != nil {
 		return BenchResult{}, err
 	}
 	terms := queryTerms(task)
-	baseline := buildBaselinePack(task, idx, items)
+	baseline, baselineSummary := buildBaselinePack(task, idx, items, terms)
 	optimized, optimizedSummary := buildPack(task, idx, items, terms)
-	baselineSummary := summarizePack(baseline, terms, nil)
 
 	runID := time.Now().UTC().Format("20060102T150405Z")
 	outputDir := WorkspaceFile(root, "benchmarks", runID)
@@ -103,6 +110,13 @@ func Bench(root string, task string) (BenchResult, error) {
 		OptimizedMemoryMatches:      optimizedSummary.MemoryMatchCount,
 		OptimizedMemoryTrustBonus:   optimizedSummary.MemoryTrustBonus,
 		OptimizedMemoryRecencyBonus: optimizedSummary.MemoryRecencyBonus,
+		BaselineCandidateTotal:      baselineSummary.Accounting.CandidateTotal,
+		BaselineSelectedTotal:       baselineSummary.Accounting.SelectedTotal,
+		OptimizedCandidateTotal:     optimizedSummary.Accounting.CandidateTotal,
+		OptimizedSelectedTotal:      optimizedSummary.Accounting.SelectedTotal,
+		ReuseIndexSource:            reuse.IndexSource,
+		ReuseMemorySource:           reuse.MemorySource,
+		ReuseArtifactCount:          reuse.ReusedArtifactCount,
 		Recommendation:              benchRecommendation(reduction, reductionPercent),
 	}
 	if err := project.WriteJSON(summaryPath, summary); err != nil {
@@ -116,6 +130,7 @@ func Bench(root string, task string) (BenchResult, error) {
 		Summary:       summary,
 		BuiltIndex:    builtIndex,
 		MatchedTerms:  terms,
+		Reuse:         reuse,
 		SummaryPath:   summaryPath,
 		BaselineMD:    baselineMD,
 		OptimizedMD:   optimizedMD,
@@ -124,38 +139,59 @@ func Bench(root string, task string) (BenchResult, error) {
 	}, nil
 }
 
-func ensureIndexAndMemory(root string) (indexer.Result, []memory.Item, bool, error) {
+func ensureIndexAndMemory(root string) (indexer.Result, []memory.Item, bool, ReuseSummary, error) {
 	if _, err := Init(root); err != nil {
-		return indexer.Result{}, nil, false, err
+		return indexer.Result{}, nil, false, ReuseSummary{}, err
+	}
+	reuse := ReuseSummary{
+		IndexBundlePath:   WorkspaceFile(root, "index", "bundle.json"),
+		MemoryEntriesPath: WorkspaceFile(root, "memory", "entries.json"),
 	}
 	idx, err := LoadIndex(root)
 	builtIndex := false
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return indexer.Result{}, nil, false, err
+			return indexer.Result{}, nil, false, ReuseSummary{}, err
 		}
 		idx, err = BuildIndex(root)
 		if err != nil {
-			return indexer.Result{}, nil, false, err
+			return indexer.Result{}, nil, false, ReuseSummary{}, err
 		}
 		builtIndex = true
+		reuse.IndexSource = "rebuilt"
+		reuse.IndexReused = false
+	} else {
+		reuse.IndexSource = "reused_existing"
+		reuse.IndexReused = true
+		reuse.ReusedArtifactCount++
 	}
 	items, err := loadMemory(root)
 	if err != nil {
-		return indexer.Result{}, nil, false, err
+		return indexer.Result{}, nil, false, ReuseSummary{}, err
 	}
-	return idx, items, builtIndex, nil
+	reuse.MemoryEntriesCount = len(items)
+	if len(items) > 0 {
+		reuse.MemorySource = "reused_existing"
+		reuse.ReusedArtifactCount++
+	} else {
+		reuse.MemorySource = "empty_workspace"
+	}
+	return idx, items, builtIndex, reuse, nil
 }
 
-func buildBaselinePack(task string, idx indexer.Result, items []memory.Item) contextpack.Pack {
+func buildBaselinePack(task string, idx indexer.Result, items []memory.Item, terms []string) (contextpack.Pack, retrievalSummary) {
 	sections := []contextpack.Section{}
-	add := func(title string, source string, content string, maxChars int) {
-		content = strings.TrimSpace(content)
+	provenance := []SectionProvenance{}
+	accounting := RetrievalAccounting{}
+	add := func(title string, source string, rendered renderedSection, maxChars int) {
+		content := strings.TrimSpace(rendered.Content)
 		if content == "" {
 			return
 		}
+		truncated := false
 		if len(content) > maxChars {
 			content = strings.TrimSpace(content[:maxChars]) + "\n...[truncated]"
+			truncated = true
 		}
 		sections = append(sections, contextpack.Section{
 			Title:        title,
@@ -163,42 +199,69 @@ func buildBaselinePack(task string, idx indexer.Result, items []memory.Item) con
 			Content:      content,
 			ApproxTokens: len(content) / 4,
 		})
+		provenance = append(provenance, SectionProvenance{
+			Title:          title,
+			Source:         source,
+			SourcePaths:    rendered.SourcePaths,
+			CandidateCount: rendered.CandidateCount,
+			SelectedCount:  rendered.SelectedCount,
+			Truncated:      truncated,
+			Notes:          rendered.Notes,
+		})
+		accounting.CandidateTotal += rendered.CandidateCount
+		accounting.SelectedTotal += rendered.SelectedCount
 	}
 
-	add("Task Brief", "task", task, 1500*4)
-	add("All Docs Snapshot", ".context/index/docs.json", renderAllDocs(idx), 5000*4)
-	add("All Code Snapshot", ".context/index/{files,symbols}.json", renderAllCode(idx), 5000*4)
-	add("Recent Changes", ".context/index/recent_changes.json", renderRecentChanges(idx), 1200*4)
+	add("Task Brief", "task", renderedSection{Content: task, CandidateCount: 1, SelectedCount: 1, Notes: []string{"user task input"}}, 1500*4)
+	allDocs := renderAllDocs(idx)
+	accounting.CandidateDocs = allDocs.CandidateCount
+	accounting.SelectedDocs = allDocs.SelectedCount
+	add("All Docs Snapshot", ".context/index/docs.json", allDocs, 5000*4)
+	allCode := renderAllCode(idx)
+	accounting.CandidateFiles = countNoteValue(allCode.Notes, "candidate_files")
+	accounting.SelectedFiles = countNoteValue(allCode.Notes, "selected_files")
+	accounting.CandidateSymbols = countNoteValue(allCode.Notes, "candidate_symbols")
+	accounting.SelectedSymbols = countNoteValue(allCode.Notes, "selected_symbols")
+	add("All Code Snapshot", ".context/index/{files,symbols}.json", allCode, 5000*4)
+	changes := renderRecentChanges(idx)
+	accounting.CandidateChanges = changes.CandidateCount
+	accounting.SelectedChanges = changes.SelectedCount
+	add("Recent Changes", ".context/index/recent_changes.json", changes, 1200*4)
 	add("Dependencies Snapshot", ".context/index/dependencies.json", renderDependencies(idx), 1600*4)
-	add("Memory Snapshot", ".context/memory/entries.json", renderMemorySummary(items), 1200*4)
-	add("Index Summary", ".context/index/bundle.json", renderIndexSummary(idx), 2500*4)
+	add("Memory Snapshot", ".context/memory/entries.json", renderedSection{Content: renderMemorySummary(items), CandidateCount: len(items), SelectedCount: min(10, len(items)), SourcePaths: []string{".context/memory/entries.json"}}, 1200*4)
+	add("Index Summary", ".context/index/bundle.json", renderedSection{Content: renderIndexSummary(idx), CandidateCount: 1, SelectedCount: 1, SourcePaths: []string{".context/index/bundle.json"}}, 2500*4)
 
 	total := 0
 	for _, section := range sections {
 		total += section.ApproxTokens
 	}
-	return contextpack.Pack{
+	pack := contextpack.Pack{
 		Task:         task,
 		Mode:         "context-tool-baseline",
 		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
 		ApproxTokens: total,
 		Sections:     sections,
 	}
+	return pack, summarizePack(pack, terms, nil, provenance, accounting)
 }
 
-func renderAllDocs(idx indexer.Result) string {
+func renderAllDocs(idx indexer.Result) renderedSection {
 	if len(idx.Docs) == 0 {
-		return "No docs found in the current index."
+		return renderedSection{Content: "No docs found in the current index.", SourcePaths: []string{".context/index/docs.json"}}
 	}
 	docs := append([]indexer.DocEntry(nil), idx.Docs...)
 	sort.Slice(docs, func(i, j int) bool { return docs[i].Path < docs[j].Path })
 	var b strings.Builder
 	limit := min(40, len(docs))
+	sourcePaths := make([]string, 0, limit)
+	selected := 0
 	for i := 0; i < limit; i++ {
 		doc := docs[i]
 		if shouldIgnorePath(doc.Path) {
 			continue
 		}
+		selected++
+		sourcePaths = append(sourcePaths, doc.Path)
 		b.WriteString(fmt.Sprintf("- %s — %s\n", doc.Path, doc.Title))
 		for _, heading := range doc.Headings {
 			if strings.TrimSpace(heading) == "" {
@@ -208,19 +271,26 @@ func renderAllDocs(idx indexer.Result) string {
 			break
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return renderedSection{
+		Content:        strings.TrimSpace(b.String()),
+		CandidateCount: len(docs),
+		SelectedCount:  selected,
+		SourcePaths:    sourcePaths,
+	}
 }
 
-func renderAllCode(idx indexer.Result) string {
+func renderAllCode(idx indexer.Result) renderedSection {
 	var b strings.Builder
 	files := append([]indexer.FileEntry(nil), idx.Files...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	b.WriteString("Files:\n")
 	fileCount := 0
+	sourcePaths := []string{}
 	for _, file := range files {
 		if shouldIgnorePath(file.Path) {
 			continue
 		}
+		sourcePaths = append(sourcePaths, file.Path)
 		b.WriteString(fmt.Sprintf("- %s (%s)\n", file.Path, file.Kind))
 		fileCount++
 		if fileCount >= 40 {
@@ -237,18 +307,30 @@ func renderAllCode(idx indexer.Result) string {
 		if shouldIgnorePath(symbol.Path) {
 			continue
 		}
+		sourcePaths = append(sourcePaths, fmt.Sprintf("%s:%s", symbol.Path, symbol.Name))
 		b.WriteString(fmt.Sprintf("- %s (%s) in %s:%d\n", symbol.Name, symbol.Kind, symbol.Path, symbol.Line))
 		symbolCount++
 		if symbolCount >= 40 {
 			break
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return renderedSection{
+		Content:        strings.TrimSpace(b.String()),
+		CandidateCount: len(files) + len(symbols),
+		SelectedCount:  fileCount + symbolCount,
+		SourcePaths:    sourcePaths,
+		Notes: []string{
+			fmt.Sprintf("candidate_files=%d", len(files)),
+			fmt.Sprintf("selected_files=%d", fileCount),
+			fmt.Sprintf("candidate_symbols=%d", len(symbols)),
+			fmt.Sprintf("selected_symbols=%d", symbolCount),
+		},
+	}
 }
 
-func renderDependencies(idx indexer.Result) string {
+func renderDependencies(idx indexer.Result) renderedSection {
 	if len(idx.Dependencies) == 0 {
-		return "No dependencies found in the current index."
+		return renderedSection{Content: "No dependencies found in the current index.", SourcePaths: []string{".context/index/dependencies.json"}}
 	}
 	deps := append([]indexer.DependencyEntry(nil), idx.Dependencies...)
 	sort.Slice(deps, func(i, j int) bool {
@@ -263,7 +345,12 @@ func renderDependencies(idx indexer.Result) string {
 		dep := deps[i]
 		b.WriteString(fmt.Sprintf("- [%s] %s %s\n", dep.Ecosystem, dep.Name, dep.Version))
 	}
-	return strings.TrimSpace(b.String())
+	return renderedSection{
+		Content:        strings.TrimSpace(b.String()),
+		CandidateCount: len(deps),
+		SelectedCount:  limit,
+		SourcePaths:    []string{".context/index/dependencies.json"},
+	}
 }
 
 func benchRecommendation(reduction int, reductionPercent int) string {
