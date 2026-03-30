@@ -121,6 +121,18 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 	if got := run.Metadata["context_ctx_code_family_diversity"]; got == "" {
 		t.Fatal("expected context_ctx_code_family_diversity metadata to be populated")
 	}
+	if got := run.Metadata["context_ctx_doc_cluster_diversity"]; got == "" {
+		t.Fatal("expected context_ctx_doc_cluster_diversity metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_code_cluster_diversity"]; got == "" {
+		t.Fatal("expected context_ctx_code_cluster_diversity metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_doc_dominant_cluster_share"]; got == "" {
+		t.Fatal("expected context_ctx_doc_dominant_cluster_share metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_code_dominant_cluster_share"]; got == "" {
+		t.Fatal("expected context_ctx_code_dominant_cluster_share metadata to be populated")
+	}
 
 	var ctxMeta map[string]any
 	if err := project.ReadJSON(run.Artifacts["ctx_context_metadata.json"], &ctxMeta); err != nil {
@@ -732,6 +744,43 @@ func TestChooseContextPackPrefersCtxForDiverseSourcesWithinExtendedWindow(t *tes
 	}
 	if selection.CtxDocFamilyDiversity != 0 || selection.CtxCodeFamilyDiversity != 0 {
 		t.Fatalf("unexpected family diversity mirrors in synthetic selection: %#v", selection)
+	}
+	if selection.CtxDocClusterDiversity != 0 || selection.CtxCodeClusterDiversity != 0 {
+		t.Fatalf("unexpected cluster diversity mirrors in synthetic selection: %#v", selection)
+	}
+}
+
+func TestChooseContextPackPrefersCtxForBalancedClustersWithinExtendedWindow(t *testing.T) {
+	arcPack := contextpack.Pack{
+		Task:         "explain context selection",
+		ApproxTokens: 1000,
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Mode Policy", Content: "generic work mode"},
+		},
+	}
+	ctxPack := contextpack.Pack{
+		Task:         "explain context selection",
+		ApproxTokens: 1160,
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Relevant Docs", Content: "cluster-balanced docs"},
+			{Title: "Relevant Code Surfaces", Content: "cluster-balanced code"},
+		},
+	}
+	selection := chooseContextPack(arcPack, contexttool.AssembleResult{
+		Pack:                     ctxPack,
+		QualityScore:             340,
+		DocClusterDiversity:      3,
+		CodeClusterDiversity:     4,
+		DocDominantClusterShare:  50,
+		CodeDominantClusterShare: 40,
+	})
+	if selection.SelectedSource != "ctx" {
+		t.Fatalf("SelectedSource = %q, want ctx", selection.SelectedSource)
+	}
+	if selection.SelectionReason != "ctx_cluster_balanced_within_extended_token_window" {
+		t.Fatalf("SelectionReason = %q, want ctx_cluster_balanced_within_extended_token_window", selection.SelectionReason)
 	}
 }
 

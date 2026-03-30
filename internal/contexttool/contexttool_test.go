@@ -594,6 +594,33 @@ func TestRenderRelevantCodePrefersCodeKindsOverDocs(t *testing.T) {
 	}
 }
 
+func TestRenderRelevantCodeSpreadsAcrossClustersWithinFamily(t *testing.T) {
+	idx := indexer.Result{
+		Files: []indexer.FileEntry{
+			{Path: "internal/contexttool/assemble.go", Kind: "go"},
+			{Path: "internal/contexttool/index.go", Kind: "go"},
+			{Path: "internal/contexttool/memory.go", Kind: "go"},
+			{Path: "internal/orchestrator/orchestrator.go", Kind: "go"},
+			{Path: "internal/presets/runtime.go", Kind: "go"},
+			{Path: "internal/budget/budget.go", Kind: "go"},
+		},
+	}
+	rendered := renderRelevantCode(idx, []string{"context"})
+	clusters := map[string]bool{}
+	for _, sourcePath := range rendered.SourcePaths {
+		clusters[pathClusterFromSourcePath(sourcePath)] = true
+	}
+	if len(clusters) < 3 {
+		t.Fatalf("expected code selection to span at least three clusters, got %v", rendered.SourcePaths)
+	}
+	if share := sectionDominantClusterShare([]SectionProvenance{{
+		Title:       "Relevant Code Surfaces",
+		SourcePaths: rendered.SourcePaths,
+	}}, "Relevant Code Surfaces"); share > 50 {
+		t.Fatalf("expected dominant cluster share <= 50, got %d from %v", share, rendered.SourcePaths)
+	}
+}
+
 func TestSummarizePackRewardsSourceDiversity(t *testing.T) {
 	pack := contextpack.Pack{
 		Task: "explain context selection",
@@ -619,6 +646,51 @@ func TestSummarizePackRewardsSourceDiversity(t *testing.T) {
 	}
 	if !contains(summary.SourceKinds, "docs") || !contains(summary.SourceKinds, "code") || !contains(summary.SourceKinds, "memory") {
 		t.Fatalf("expected docs/code/memory source kinds, got %v", summary.SourceKinds)
+	}
+}
+
+func TestSummarizePackTracksClusterDiversityAndDominance(t *testing.T) {
+	pack := contextpack.Pack{
+		Task: "explain context selection",
+		Sections: []contextpack.Section{
+			{Title: "Relevant Docs", Content: "docs"},
+			{Title: "Relevant Code Surfaces", Content: "code"},
+		},
+	}
+	provenance := []SectionProvenance{
+		{
+			Title:         "Relevant Docs",
+			SelectedCount: 4,
+			SourcePaths: []string{
+				"apps/docs/docs/context-tool.md",
+				"apps/docs/docs/provider-budgeting.md",
+				"rfcs/context-management-tool.md",
+				"memory_bank/active_context.md",
+			},
+		},
+		{
+			Title:         "Relevant Code Surfaces",
+			SelectedCount: 4,
+			SourcePaths: []string{
+				"internal/contexttool/assemble.go",
+				"internal/contexttool/index.go",
+				"internal/orchestrator/orchestrator.go",
+				"internal/presets/runtime.go",
+			},
+		},
+	}
+	summary := summarizePack(pack, []string{"context", "selection"}, nil, provenance, RetrievalAccounting{})
+	if summary.DocClusterDiversity < 3 {
+		t.Fatalf("expected doc cluster diversity >= 3, got %d", summary.DocClusterDiversity)
+	}
+	if summary.CodeClusterDiversity < 3 {
+		t.Fatalf("expected code cluster diversity >= 3, got %d", summary.CodeClusterDiversity)
+	}
+	if summary.DocDominantClusterShare <= 0 || summary.DocDominantClusterShare > 50 {
+		t.Fatalf("unexpected doc dominant cluster share %d", summary.DocDominantClusterShare)
+	}
+	if summary.CodeDominantClusterShare <= 0 || summary.CodeDominantClusterShare > 50 {
+		t.Fatalf("unexpected code dominant cluster share %d", summary.CodeDominantClusterShare)
 	}
 }
 

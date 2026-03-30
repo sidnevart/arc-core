@@ -187,6 +187,21 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
   - `ctx bench` summaries now persist `optimized_doc_family_diversity` and `optimized_code_family_diversity`
   - ARC run metadata now mirrors `context_ctx_doc_family_diversity` and `context_ctx_code_family_diversity`
   - this keeps the optimized pack from looking diverse only at the section level while still collapsing onto one dominant subtree inside `docs` or `code`
+- a later subtree-dominance slice on 2026-03-30 tightened the same sections one step further:
+  - `ctx` now distinguishes broad path families from tighter path clusters
+  - docs/code selection applies a stricter cluster cap before falling back to raw-score order
+  - `ctx assemble` metadata now persists:
+    - `doc_cluster_diversity`
+    - `code_cluster_diversity`
+    - `doc_dominant_cluster_share`
+    - `code_dominant_cluster_share`
+  - `ctx bench` summaries now persist the same optimized cluster-diversity and dominant-share fields
+  - ARC run metadata now mirrors:
+    - `context_ctx_doc_cluster_diversity`
+    - `context_ctx_code_cluster_diversity`
+    - `context_ctx_doc_dominant_cluster_share`
+    - `context_ctx_code_dominant_cluster_share`
+  - selection can now also justify a `ctx` pack as cluster-balanced within a token window instead of only smaller, more memory-matched, or more source-diverse
 
 ## Verification
 
@@ -205,3 +220,4 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
 - a later smoke on 2026-03-30 confirmed the first reuse-evidence slice too: `.context/artifacts/assemble/20260330T203305Z/metadata.json` recorded `reuse.index_source=reused_existing`, `reuse.memory_source=reused_existing`, and `reuse.reused_artifact_count=2`; `.context/benchmarks/20260330T203302Z/summary.json` mirrored the same reuse summary fields; and `.arc/runs/20260330T203303Z-771727000/run.json` surfaced `context_ctx_index_source=reused_existing` plus `context_ctx_reused_artifact_count=2` without needing to open the full standalone artifact.
 - a later smoke on 2026-03-30 confirmed the first diversity slice too: `.context/artifacts/assemble/20260330T205625Z/metadata.json` recorded `source_kinds=["task","docs","code","memory","index"]`, `source_diversity=5`, and `diversity_bonus=90`; `.context/benchmarks/20260330T205625Z/summary.json` mirrored `baseline_source_diversity=5` vs `optimized_source_diversity=5` plus `optimized_diversity_bonus=90`; and `.arc/runs/20260330T205626Z-351423000/run.json` surfaced `context_ctx_source_diversity=5` with `context_ctx_diversity_bonus=90`.
 - a later smoke on 2026-03-30 confirmed the first path-family slice too: `.context/artifacts/assemble/20260330T210657Z/metadata.json` recorded `doc_family_diversity=7` and `code_family_diversity=9`; `.context/benchmarks/20260330T210657Z/summary.json` mirrored `optimized_doc_family_diversity=6` plus `optimized_code_family_diversity=10`; and `.arc/runs/20260330T210736Z-708381000/{ctx_context_metadata.json,run.json}` now both expose the same family-diversity signals inside ARC run artifacts.
+- a later smoke on 2026-03-30 confirmed the first subtree-dominance slice too: `.context/artifacts/assemble/20260330T212216Z/metadata.json` recorded `doc_cluster_diversity=1`, `code_cluster_diversity=16`, `doc_dominant_cluster_share=100`, and `code_dominant_cluster_share=15`; `.context/benchmarks/20260330T212216Z/summary.json` mirrored `optimized_doc_cluster_diversity=8`, `optimized_code_cluster_diversity=14`, `optimized_doc_dominant_cluster_share=12`, and `optimized_code_dominant_cluster_share=15`; and `.arc/runs/20260330T212216Z-840223000/run.json` surfaced the same `context_ctx_*cluster*` fields in top-level ARC metadata.

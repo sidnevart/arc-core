@@ -13,10 +13,13 @@
 - `assemble` metadata records reuse evidence via `reuse.index_source`, `reuse.memory_source`, and `reuse.reused_artifact_count`.
 - `assemble` metadata records diversity evidence via `source_kinds`, `source_diversity`, and `diversity_bonus`.
 - `assemble` metadata records family-level diversity evidence via `doc_family_diversity` and `code_family_diversity`.
+- `assemble` metadata records cluster-level subtree-dominance evidence via `doc_cluster_diversity`, `code_cluster_diversity`, `doc_dominant_cluster_share`, and `code_dominant_cluster_share`.
 - `bench` writes baseline, optimized, and summary artifacts, and the summary includes candidate-vs-final totals plus reuse-source fields for both strategies.
 - `bench` summary also includes diversity fields such as `baseline_source_diversity`, `optimized_source_diversity`, and `optimized_diversity_bonus`.
 - `bench` summary also includes `optimized_doc_family_diversity` and `optimized_code_family_diversity`.
+- `bench` summary also includes `optimized_doc_cluster_diversity`, `optimized_code_cluster_diversity`, `optimized_doc_dominant_cluster_share`, and `optimized_code_dominant_cluster_share`.
 - ARC run path can still mirror selected `ctx` artifacts into `.arc/runs/...`.
 - ARC run metadata mirrors top-level `ctx` reuse fields such as `context_ctx_index_source` and `context_ctx_reused_artifact_count`.
 - ARC run metadata mirrors top-level diversity fields such as `context_ctx_source_diversity` and `context_ctx_diversity_bonus`.
 - ARC run metadata mirrors family-level diversity fields such as `context_ctx_doc_family_diversity` and `context_ctx_code_family_diversity`.
+- ARC run metadata mirrors cluster-level subtree fields such as `context_ctx_doc_cluster_diversity`, `context_ctx_code_cluster_diversity`, `context_ctx_doc_dominant_cluster_share`, and `context_ctx_code_dominant_cluster_share`.

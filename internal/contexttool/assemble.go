@@ -17,31 +17,35 @@ import (
 )
 
 type AssembleResult struct {
-	OutputDir           string              `json:"output_dir"`
-	PackJSONPath        string              `json:"pack_json_path"`
-	PackMDPath          string              `json:"pack_md_path"`
-	MetadataPath        string              `json:"metadata_path"`
-	Pack                contextpack.Pack    `json:"pack"`
-	BuiltIndex          bool                `json:"built_index"`
-	MatchedTerms        []string            `json:"matched_terms"`
-	QualityScore        int                 `json:"quality_score"`
-	TermCoverage        int                 `json:"term_coverage"`
-	MatchedSections     []string            `json:"matched_sections"`
-	MemoryMatchCount    int                 `json:"memory_match_count"`
-	MatchedMemoryIDs    []string            `json:"matched_memory_ids"`
-	MemoryBoost         int                 `json:"memory_boost"`
-	MemoryTrustBonus    int                 `json:"memory_trust_bonus"`
-	MemoryRecencyBonus  int                 `json:"memory_recency_bonus"`
-	SourceKinds         []string            `json:"source_kinds,omitempty"`
-	SourceDiversity     int                 `json:"source_diversity"`
-	DiversityBonus      int                 `json:"diversity_bonus"`
-	DocFamilyDiversity  int                 `json:"doc_family_diversity"`
-	CodeFamilyDiversity int                 `json:"code_family_diversity"`
-	ConfigPath          string              `json:"config_path"`
-	HumanConfig         HumanConfig         `json:"human_config"`
-	SectionProvenance   []SectionProvenance `json:"section_provenance,omitempty"`
-	Accounting          RetrievalAccounting `json:"accounting"`
-	Reuse               ReuseSummary        `json:"reuse"`
+	OutputDir                string              `json:"output_dir"`
+	PackJSONPath             string              `json:"pack_json_path"`
+	PackMDPath               string              `json:"pack_md_path"`
+	MetadataPath             string              `json:"metadata_path"`
+	Pack                     contextpack.Pack    `json:"pack"`
+	BuiltIndex               bool                `json:"built_index"`
+	MatchedTerms             []string            `json:"matched_terms"`
+	QualityScore             int                 `json:"quality_score"`
+	TermCoverage             int                 `json:"term_coverage"`
+	MatchedSections          []string            `json:"matched_sections"`
+	MemoryMatchCount         int                 `json:"memory_match_count"`
+	MatchedMemoryIDs         []string            `json:"matched_memory_ids"`
+	MemoryBoost              int                 `json:"memory_boost"`
+	MemoryTrustBonus         int                 `json:"memory_trust_bonus"`
+	MemoryRecencyBonus       int                 `json:"memory_recency_bonus"`
+	SourceKinds              []string            `json:"source_kinds,omitempty"`
+	SourceDiversity          int                 `json:"source_diversity"`
+	DiversityBonus           int                 `json:"diversity_bonus"`
+	DocFamilyDiversity       int                 `json:"doc_family_diversity"`
+	CodeFamilyDiversity      int                 `json:"code_family_diversity"`
+	DocClusterDiversity      int                 `json:"doc_cluster_diversity"`
+	CodeClusterDiversity     int                 `json:"code_cluster_diversity"`
+	DocDominantClusterShare  int                 `json:"doc_dominant_cluster_share"`
+	CodeDominantClusterShare int                 `json:"code_dominant_cluster_share"`
+	ConfigPath               string              `json:"config_path"`
+	HumanConfig              HumanConfig         `json:"human_config"`
+	SectionProvenance        []SectionProvenance `json:"section_provenance,omitempty"`
+	Accounting               RetrievalAccounting `json:"accounting"`
+	Reuse                    ReuseSummary        `json:"reuse"`
 }
 
 type SectionProvenance struct {
@@ -80,49 +84,57 @@ type ReuseSummary struct {
 }
 
 type assembleMetadata struct {
-	Task                 string              `json:"task"`
-	GeneratedAt          string              `json:"generated_at"`
-	MatchedTerms         []string            `json:"matched_terms"`
-	BuiltIndex           bool                `json:"built_index"`
-	IndexPath            string              `json:"index_path"`
-	MemoryPath           string              `json:"memory_path"`
-	Sections             []string            `json:"sections"`
-	QualityScore         int                 `json:"quality_score"`
-	TermCoverage         int                 `json:"term_coverage"`
-	MatchedSectionTitles []string            `json:"matched_section_titles"`
-	MemoryMatchCount     int                 `json:"memory_match_count"`
-	MatchedMemoryIDs     []string            `json:"matched_memory_ids"`
-	MemoryBoost          int                 `json:"memory_boost"`
-	MemoryTrustBonus     int                 `json:"memory_trust_bonus"`
-	MemoryRecencyBonus   int                 `json:"memory_recency_bonus"`
-	SourceKinds          []string            `json:"source_kinds,omitempty"`
-	SourceDiversity      int                 `json:"source_diversity"`
-	DiversityBonus       int                 `json:"diversity_bonus"`
-	DocFamilyDiversity   int                 `json:"doc_family_diversity"`
-	CodeFamilyDiversity  int                 `json:"code_family_diversity"`
-	ConfigPath           string              `json:"config_path"`
-	HumanConfig          HumanConfig         `json:"human_config"`
-	SectionProvenance    []SectionProvenance `json:"section_provenance,omitempty"`
-	Accounting           RetrievalAccounting `json:"accounting"`
-	Reuse                ReuseSummary        `json:"reuse"`
+	Task                     string              `json:"task"`
+	GeneratedAt              string              `json:"generated_at"`
+	MatchedTerms             []string            `json:"matched_terms"`
+	BuiltIndex               bool                `json:"built_index"`
+	IndexPath                string              `json:"index_path"`
+	MemoryPath               string              `json:"memory_path"`
+	Sections                 []string            `json:"sections"`
+	QualityScore             int                 `json:"quality_score"`
+	TermCoverage             int                 `json:"term_coverage"`
+	MatchedSectionTitles     []string            `json:"matched_section_titles"`
+	MemoryMatchCount         int                 `json:"memory_match_count"`
+	MatchedMemoryIDs         []string            `json:"matched_memory_ids"`
+	MemoryBoost              int                 `json:"memory_boost"`
+	MemoryTrustBonus         int                 `json:"memory_trust_bonus"`
+	MemoryRecencyBonus       int                 `json:"memory_recency_bonus"`
+	SourceKinds              []string            `json:"source_kinds,omitempty"`
+	SourceDiversity          int                 `json:"source_diversity"`
+	DiversityBonus           int                 `json:"diversity_bonus"`
+	DocFamilyDiversity       int                 `json:"doc_family_diversity"`
+	CodeFamilyDiversity      int                 `json:"code_family_diversity"`
+	DocClusterDiversity      int                 `json:"doc_cluster_diversity"`
+	CodeClusterDiversity     int                 `json:"code_cluster_diversity"`
+	DocDominantClusterShare  int                 `json:"doc_dominant_cluster_share"`
+	CodeDominantClusterShare int                 `json:"code_dominant_cluster_share"`
+	ConfigPath               string              `json:"config_path"`
+	HumanConfig              HumanConfig         `json:"human_config"`
+	SectionProvenance        []SectionProvenance `json:"section_provenance,omitempty"`
+	Accounting               RetrievalAccounting `json:"accounting"`
+	Reuse                    ReuseSummary        `json:"reuse"`
 }
 
 type retrievalSummary struct {
-	QualityScore        int
-	TermCoverage        int
-	MatchedSections     []string
-	MemoryMatchCount    int
-	MatchedMemoryIDs    []string
-	MemoryBoost         int
-	MemoryTrustBonus    int
-	MemoryRecencyBonus  int
-	SourceKinds         []string
-	SourceDiversity     int
-	DiversityBonus      int
-	DocFamilyDiversity  int
-	CodeFamilyDiversity int
-	SectionProvenance   []SectionProvenance
-	Accounting          RetrievalAccounting
+	QualityScore             int
+	TermCoverage             int
+	MatchedSections          []string
+	MemoryMatchCount         int
+	MatchedMemoryIDs         []string
+	MemoryBoost              int
+	MemoryTrustBonus         int
+	MemoryRecencyBonus       int
+	SourceKinds              []string
+	SourceDiversity          int
+	DiversityBonus           int
+	DocFamilyDiversity       int
+	CodeFamilyDiversity      int
+	DocClusterDiversity      int
+	CodeClusterDiversity     int
+	DocDominantClusterShare  int
+	CodeDominantClusterShare int
+	SectionProvenance        []SectionProvenance
+	Accounting               RetrievalAccounting
 }
 
 type memoryCandidate struct {
@@ -188,62 +200,70 @@ func Assemble(root string, task string) (AssembleResult, error) {
 		sections = append(sections, section.Title)
 	}
 	meta := assembleMetadata{
-		Task:                 task,
-		GeneratedAt:          pack.GeneratedAt,
-		MatchedTerms:         terms,
-		BuiltIndex:           builtIndex,
-		IndexPath:            WorkspaceFile(root, "index", "bundle.json"),
-		MemoryPath:           WorkspaceFile(root, "memory", "entries.json"),
-		Sections:             sections,
-		QualityScore:         summary.QualityScore,
-		TermCoverage:         summary.TermCoverage,
-		MatchedSectionTitles: summary.MatchedSections,
-		MemoryMatchCount:     summary.MemoryMatchCount,
-		MatchedMemoryIDs:     summary.MatchedMemoryIDs,
-		MemoryBoost:          summary.MemoryBoost,
-		MemoryTrustBonus:     summary.MemoryTrustBonus,
-		MemoryRecencyBonus:   summary.MemoryRecencyBonus,
-		SourceKinds:          summary.SourceKinds,
-		SourceDiversity:      summary.SourceDiversity,
-		DiversityBonus:       summary.DiversityBonus,
-		DocFamilyDiversity:   summary.DocFamilyDiversity,
-		CodeFamilyDiversity:  summary.CodeFamilyDiversity,
-		ConfigPath:           HumanConfigPath(root),
-		HumanConfig:          cfg,
-		SectionProvenance:    summary.SectionProvenance,
-		Accounting:           summary.Accounting,
-		Reuse:                reuse,
+		Task:                     task,
+		GeneratedAt:              pack.GeneratedAt,
+		MatchedTerms:             terms,
+		BuiltIndex:               builtIndex,
+		IndexPath:                WorkspaceFile(root, "index", "bundle.json"),
+		MemoryPath:               WorkspaceFile(root, "memory", "entries.json"),
+		Sections:                 sections,
+		QualityScore:             summary.QualityScore,
+		TermCoverage:             summary.TermCoverage,
+		MatchedSectionTitles:     summary.MatchedSections,
+		MemoryMatchCount:         summary.MemoryMatchCount,
+		MatchedMemoryIDs:         summary.MatchedMemoryIDs,
+		MemoryBoost:              summary.MemoryBoost,
+		MemoryTrustBonus:         summary.MemoryTrustBonus,
+		MemoryRecencyBonus:       summary.MemoryRecencyBonus,
+		SourceKinds:              summary.SourceKinds,
+		SourceDiversity:          summary.SourceDiversity,
+		DiversityBonus:           summary.DiversityBonus,
+		DocFamilyDiversity:       summary.DocFamilyDiversity,
+		CodeFamilyDiversity:      summary.CodeFamilyDiversity,
+		DocClusterDiversity:      summary.DocClusterDiversity,
+		CodeClusterDiversity:     summary.CodeClusterDiversity,
+		DocDominantClusterShare:  summary.DocDominantClusterShare,
+		CodeDominantClusterShare: summary.CodeDominantClusterShare,
+		ConfigPath:               HumanConfigPath(root),
+		HumanConfig:              cfg,
+		SectionProvenance:        summary.SectionProvenance,
+		Accounting:               summary.Accounting,
+		Reuse:                    reuse,
 	}
 	if err := project.WriteJSON(metaPath, meta); err != nil {
 		return AssembleResult{}, err
 	}
 
 	return AssembleResult{
-		OutputDir:           outputDir,
-		PackJSONPath:        jsonPath,
-		PackMDPath:          mdPath,
-		MetadataPath:        metaPath,
-		Pack:                pack,
-		BuiltIndex:          builtIndex,
-		MatchedTerms:        terms,
-		QualityScore:        summary.QualityScore,
-		TermCoverage:        summary.TermCoverage,
-		MatchedSections:     summary.MatchedSections,
-		MemoryMatchCount:    summary.MemoryMatchCount,
-		MatchedMemoryIDs:    summary.MatchedMemoryIDs,
-		MemoryBoost:         summary.MemoryBoost,
-		MemoryTrustBonus:    summary.MemoryTrustBonus,
-		MemoryRecencyBonus:  summary.MemoryRecencyBonus,
-		SourceKinds:         summary.SourceKinds,
-		SourceDiversity:     summary.SourceDiversity,
-		DiversityBonus:      summary.DiversityBonus,
-		DocFamilyDiversity:  summary.DocFamilyDiversity,
-		CodeFamilyDiversity: summary.CodeFamilyDiversity,
-		ConfigPath:          HumanConfigPath(root),
-		HumanConfig:         cfg,
-		SectionProvenance:   summary.SectionProvenance,
-		Accounting:          summary.Accounting,
-		Reuse:               reuse,
+		OutputDir:                outputDir,
+		PackJSONPath:             jsonPath,
+		PackMDPath:               mdPath,
+		MetadataPath:             metaPath,
+		Pack:                     pack,
+		BuiltIndex:               builtIndex,
+		MatchedTerms:             terms,
+		QualityScore:             summary.QualityScore,
+		TermCoverage:             summary.TermCoverage,
+		MatchedSections:          summary.MatchedSections,
+		MemoryMatchCount:         summary.MemoryMatchCount,
+		MatchedMemoryIDs:         summary.MatchedMemoryIDs,
+		MemoryBoost:              summary.MemoryBoost,
+		MemoryTrustBonus:         summary.MemoryTrustBonus,
+		MemoryRecencyBonus:       summary.MemoryRecencyBonus,
+		SourceKinds:              summary.SourceKinds,
+		SourceDiversity:          summary.SourceDiversity,
+		DiversityBonus:           summary.DiversityBonus,
+		DocFamilyDiversity:       summary.DocFamilyDiversity,
+		CodeFamilyDiversity:      summary.CodeFamilyDiversity,
+		DocClusterDiversity:      summary.DocClusterDiversity,
+		CodeClusterDiversity:     summary.CodeClusterDiversity,
+		DocDominantClusterShare:  summary.DocDominantClusterShare,
+		CodeDominantClusterShare: summary.CodeDominantClusterShare,
+		ConfigPath:               HumanConfigPath(root),
+		HumanConfig:              cfg,
+		SectionProvenance:        summary.SectionProvenance,
+		Accounting:               summary.Accounting,
+		Reuse:                    reuse,
 	}, nil
 }
 
@@ -687,22 +707,30 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 	sourceKinds, diversityBonus := sourceDiversitySignals(provenance)
 	docFamilyDiversity := sectionFamilyDiversity(provenance, "Relevant Docs")
 	codeFamilyDiversity := sectionFamilyDiversity(provenance, "Relevant Code Surfaces")
+	docClusterDiversity := sectionClusterDiversity(provenance, "Relevant Docs")
+	codeClusterDiversity := sectionClusterDiversity(provenance, "Relevant Code Surfaces")
+	docDominantClusterShare := sectionDominantClusterShare(provenance, "Relevant Docs")
+	codeDominantClusterShare := sectionDominantClusterShare(provenance, "Relevant Code Surfaces")
 	if len(terms) == 0 {
 		memBoost, trustBonus, recencyBonus := memoryBonuses(memoryMatches)
 		return retrievalSummary{
-			QualityScore:        len(pack.Sections)*10 + memBoost + diversityBonus,
-			MemoryMatchCount:    len(memoryMatches),
-			MatchedMemoryIDs:    matchedMemoryIDs(memoryMatches),
-			MemoryBoost:         memBoost,
-			MemoryTrustBonus:    trustBonus,
-			MemoryRecencyBonus:  recencyBonus,
-			SourceKinds:         sourceKinds,
-			SourceDiversity:     len(sourceKinds),
-			DiversityBonus:      diversityBonus,
-			DocFamilyDiversity:  docFamilyDiversity,
-			CodeFamilyDiversity: codeFamilyDiversity,
-			SectionProvenance:   provenance,
-			Accounting:          accounting,
+			QualityScore:             len(pack.Sections)*10 + memBoost + diversityBonus,
+			MemoryMatchCount:         len(memoryMatches),
+			MatchedMemoryIDs:         matchedMemoryIDs(memoryMatches),
+			MemoryBoost:              memBoost,
+			MemoryTrustBonus:         trustBonus,
+			MemoryRecencyBonus:       recencyBonus,
+			SourceKinds:              sourceKinds,
+			SourceDiversity:          len(sourceKinds),
+			DiversityBonus:           diversityBonus,
+			DocFamilyDiversity:       docFamilyDiversity,
+			CodeFamilyDiversity:      codeFamilyDiversity,
+			DocClusterDiversity:      docClusterDiversity,
+			CodeClusterDiversity:     codeClusterDiversity,
+			DocDominantClusterShare:  docDominantClusterShare,
+			CodeDominantClusterShare: codeDominantClusterShare,
+			SectionProvenance:        provenance,
+			Accounting:               accounting,
 		}
 	}
 	lowerSections := make([]string, 0, len(pack.Sections))
@@ -744,22 +772,27 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 		}
 	}
 	memBoost, trustBonus, recencyBonus := memoryBonuses(memoryMatches)
+	clusterPenalty := dominancePenalty(docDominantClusterShare) + dominancePenalty(codeDominantClusterShare)
 	return retrievalSummary{
-		QualityScore:        covered*100 + len(matchedSections)*12 + bonus + memBoost + diversityBonus,
-		TermCoverage:        covered,
-		MatchedSections:     matchedSections,
-		MemoryMatchCount:    len(memoryMatches),
-		MatchedMemoryIDs:    matchedMemoryIDs(memoryMatches),
-		MemoryBoost:         memBoost,
-		MemoryTrustBonus:    trustBonus,
-		MemoryRecencyBonus:  recencyBonus,
-		SourceKinds:         sourceKinds,
-		SourceDiversity:     len(sourceKinds),
-		DiversityBonus:      diversityBonus,
-		DocFamilyDiversity:  docFamilyDiversity,
-		CodeFamilyDiversity: codeFamilyDiversity,
-		SectionProvenance:   provenance,
-		Accounting:          accounting,
+		QualityScore:             covered*100 + len(matchedSections)*12 + bonus + memBoost + diversityBonus - clusterPenalty,
+		TermCoverage:             covered,
+		MatchedSections:          matchedSections,
+		MemoryMatchCount:         len(memoryMatches),
+		MatchedMemoryIDs:         matchedMemoryIDs(memoryMatches),
+		MemoryBoost:              memBoost,
+		MemoryTrustBonus:         trustBonus,
+		MemoryRecencyBonus:       recencyBonus,
+		SourceKinds:              sourceKinds,
+		SourceDiversity:          len(sourceKinds),
+		DiversityBonus:           diversityBonus,
+		DocFamilyDiversity:       docFamilyDiversity,
+		CodeFamilyDiversity:      codeFamilyDiversity,
+		DocClusterDiversity:      docClusterDiversity,
+		CodeClusterDiversity:     codeClusterDiversity,
+		DocDominantClusterShare:  docDominantClusterShare,
+		CodeDominantClusterShare: codeDominantClusterShare,
+		SectionProvenance:        provenance,
+		Accounting:               accounting,
 	}
 }
 
@@ -769,19 +802,26 @@ func selectDocCandidates(candidates []docCandidate, limit int) []docCandidate {
 	}
 	selected := make([]docCandidate, 0, limit)
 	familyCounts := map[string]int{}
+	clusterCounts := map[string]int{}
 	used := map[int]bool{}
-	for pass := 0; pass < 2 && len(selected) < limit; pass++ {
+	maxClusterShare := max(1, limit/3)
+	for pass := 0; pass < 3 && len(selected) < limit; pass++ {
 		for i, candidate := range candidates {
 			if used[i] {
 				continue
 			}
 			family := pathFamily(candidate.doc.Path)
-			if pass == 0 && familyCounts[family] >= 2 {
+			cluster := pathCluster(candidate.doc.Path)
+			if pass == 0 && (familyCounts[family] >= 2 || clusterCounts[cluster] >= 1) {
+				continue
+			}
+			if pass == 1 && clusterCounts[cluster] >= maxClusterShare {
 				continue
 			}
 			selected = append(selected, candidate)
 			used[i] = true
 			familyCounts[family]++
+			clusterCounts[cluster]++
 			if len(selected) >= limit {
 				break
 			}
@@ -796,19 +836,26 @@ func selectDiverseFiles(files []fileCandidate, limit int) []fileCandidate {
 	}
 	selected := make([]fileCandidate, 0, limit)
 	familyCounts := map[string]int{}
+	clusterCounts := map[string]int{}
 	used := map[int]bool{}
-	for pass := 0; pass < 2 && len(selected) < limit; pass++ {
+	maxClusterShare := max(1, limit/3)
+	for pass := 0; pass < 3 && len(selected) < limit; pass++ {
 		for i, candidate := range files {
 			if used[i] {
 				continue
 			}
 			family := pathFamily(candidate.file.Path)
-			if pass == 0 && familyCounts[family] >= 2 {
+			cluster := pathCluster(candidate.file.Path)
+			if pass == 0 && (familyCounts[family] >= 2 || clusterCounts[cluster] >= 1) {
+				continue
+			}
+			if pass == 1 && clusterCounts[cluster] >= maxClusterShare {
 				continue
 			}
 			selected = append(selected, candidate)
 			used[i] = true
 			familyCounts[family]++
+			clusterCounts[cluster]++
 			if len(selected) >= limit {
 				break
 			}
@@ -868,6 +915,51 @@ func sectionFamilyDiversity(provenance []SectionProvenance, title string) int {
 	return 0
 }
 
+func sectionClusterDiversity(provenance []SectionProvenance, title string) int {
+	for _, section := range provenance {
+		if section.Title != title || len(section.SourcePaths) == 0 {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, sourcePath := range section.SourcePaths {
+			cluster := pathClusterFromSourcePath(sourcePath)
+			if cluster == "" {
+				continue
+			}
+			seen[cluster] = true
+		}
+		return len(seen)
+	}
+	return 0
+}
+
+func sectionDominantClusterShare(provenance []SectionProvenance, title string) int {
+	for _, section := range provenance {
+		if section.Title != title || len(section.SourcePaths) == 0 {
+			continue
+		}
+		counts := map[string]int{}
+		total := 0
+		maxCount := 0
+		for _, sourcePath := range section.SourcePaths {
+			cluster := pathClusterFromSourcePath(sourcePath)
+			if cluster == "" {
+				continue
+			}
+			counts[cluster]++
+			total++
+			if counts[cluster] > maxCount {
+				maxCount = counts[cluster]
+			}
+		}
+		if total == 0 {
+			return 0
+		}
+		return maxCount * 100 / total
+	}
+	return 0
+}
+
 func sectionSourceKind(title string) string {
 	switch title {
 	case "Relevant Docs", "All Docs Snapshot":
@@ -896,6 +988,13 @@ func pathFamilyFromSourcePath(value string) string {
 	return pathFamily(value)
 }
 
+func pathClusterFromSourcePath(value string) string {
+	if idx := strings.Index(value, ":"); idx > 0 {
+		value = value[:idx]
+	}
+	return pathCluster(value)
+}
+
 func pathFamily(path string) string {
 	path = strings.TrimSpace(path)
 	path = strings.TrimPrefix(path, "./")
@@ -914,6 +1013,40 @@ func pathFamily(path string) string {
 		}
 	}
 	return parts[0]
+}
+
+func pathCluster(path string) string {
+	path = strings.TrimSpace(path)
+	path = strings.TrimPrefix(path, "./")
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
+		return ""
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) <= 2 {
+		return strings.Join(parts, "/")
+	}
+	switch parts[0] {
+	case "internal", "cmd", "apps", "content", "memory_bank", "backups":
+		limit := min(3, len(parts))
+		return strings.Join(parts[:limit], "/")
+	default:
+		limit := min(2, len(parts))
+		return strings.Join(parts[:limit], "/")
+	}
+}
+
+func dominancePenalty(share int) int {
+	switch {
+	case share >= 80:
+		return 40
+	case share >= 65:
+		return 20
+	case share >= 50:
+		return 10
+	default:
+		return 0
+	}
 }
 
 func codeFileKindBonus(kind string) int {
