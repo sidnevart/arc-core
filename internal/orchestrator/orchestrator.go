@@ -110,6 +110,8 @@ type ContextSelection struct {
 	CtxMemoryBoost        int              `json:"ctx_memory_boost"`
 	CtxMemoryTrustBonus   int              `json:"ctx_memory_trust_bonus"`
 	CtxMemoryRecencyBonus int              `json:"ctx_memory_recency_bonus"`
+	CtxSourceDiversity    int              `json:"ctx_source_diversity"`
+	CtxDiversityBonus     int              `json:"ctx_diversity_bonus"`
 }
 
 func Plan(root string, opts TaskOptions) (Run, error) {
@@ -1092,6 +1094,8 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 	run.Metadata["context_ctx_memory_boost"] = fmt.Sprintf("%d", selection.CtxMemoryBoost)
 	run.Metadata["context_ctx_memory_trust_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryTrustBonus)
 	run.Metadata["context_ctx_memory_recency_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryRecencyBonus)
+	run.Metadata["context_ctx_source_diversity"] = fmt.Sprintf("%d", selection.CtxSourceDiversity)
+	run.Metadata["context_ctx_diversity_bonus"] = fmt.Sprintf("%d", selection.CtxDiversityBonus)
 	run.Metadata["context_ctx_candidate_total"] = fmt.Sprintf("%d", ctxResult.Accounting.CandidateTotal)
 	run.Metadata["context_ctx_selected_total"] = fmt.Sprintf("%d", ctxResult.Accounting.SelectedTotal)
 	run.Metadata["context_ctx_index_source"] = ctxResult.Reuse.IndexSource
@@ -1126,6 +1130,10 @@ func chooseContextPack(arcPack contextpack.Pack, ctxResult contexttool.AssembleR
 		selected = ctxPack
 		source = "ctx"
 		reason = "ctx_memory_match_within_extended_token_window"
+	} else if ctxPack.ApproxTokens > 0 && ctxResult.SourceDiversity >= 3 && withinPercent(ctxPack.ApproxTokens, arcPack.ApproxTokens, 20) && ctxQuality+ctxResult.DiversityBonus >= arcQuality {
+		selected = ctxPack
+		source = "ctx"
+		reason = "ctx_diverse_sources_within_extended_token_window"
 	} else if arcPack.ApproxTokens > 0 {
 		reason = "arc_kept_for_size_or_quality"
 	}
@@ -1144,6 +1152,8 @@ func chooseContextPack(arcPack contextpack.Pack, ctxResult contexttool.AssembleR
 		CtxMemoryBoost:        ctxResult.MemoryBoost,
 		CtxMemoryTrustBonus:   ctxResult.MemoryTrustBonus,
 		CtxMemoryRecencyBonus: ctxResult.MemoryRecencyBonus,
+		CtxSourceDiversity:    ctxResult.SourceDiversity,
+		CtxDiversityBonus:     ctxResult.DiversityBonus,
 	}
 }
 

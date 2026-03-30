@@ -32,6 +32,9 @@ type AssembleResult struct {
 	MemoryBoost        int                 `json:"memory_boost"`
 	MemoryTrustBonus   int                 `json:"memory_trust_bonus"`
 	MemoryRecencyBonus int                 `json:"memory_recency_bonus"`
+	SourceKinds        []string            `json:"source_kinds,omitempty"`
+	SourceDiversity    int                 `json:"source_diversity"`
+	DiversityBonus     int                 `json:"diversity_bonus"`
 	ConfigPath         string              `json:"config_path"`
 	HumanConfig        HumanConfig         `json:"human_config"`
 	SectionProvenance  []SectionProvenance `json:"section_provenance,omitempty"`
@@ -90,6 +93,9 @@ type assembleMetadata struct {
 	MemoryBoost          int                 `json:"memory_boost"`
 	MemoryTrustBonus     int                 `json:"memory_trust_bonus"`
 	MemoryRecencyBonus   int                 `json:"memory_recency_bonus"`
+	SourceKinds          []string            `json:"source_kinds,omitempty"`
+	SourceDiversity      int                 `json:"source_diversity"`
+	DiversityBonus       int                 `json:"diversity_bonus"`
 	ConfigPath           string              `json:"config_path"`
 	HumanConfig          HumanConfig         `json:"human_config"`
 	SectionProvenance    []SectionProvenance `json:"section_provenance,omitempty"`
@@ -106,6 +112,9 @@ type retrievalSummary struct {
 	MemoryBoost        int
 	MemoryTrustBonus   int
 	MemoryRecencyBonus int
+	SourceKinds        []string
+	SourceDiversity    int
+	DiversityBonus     int
 	SectionProvenance  []SectionProvenance
 	Accounting         RetrievalAccounting
 }
@@ -173,6 +182,9 @@ func Assemble(root string, task string) (AssembleResult, error) {
 		MemoryBoost:          summary.MemoryBoost,
 		MemoryTrustBonus:     summary.MemoryTrustBonus,
 		MemoryRecencyBonus:   summary.MemoryRecencyBonus,
+		SourceKinds:          summary.SourceKinds,
+		SourceDiversity:      summary.SourceDiversity,
+		DiversityBonus:       summary.DiversityBonus,
 		ConfigPath:           HumanConfigPath(root),
 		HumanConfig:          cfg,
 		SectionProvenance:    summary.SectionProvenance,
@@ -199,6 +211,9 @@ func Assemble(root string, task string) (AssembleResult, error) {
 		MemoryBoost:        summary.MemoryBoost,
 		MemoryTrustBonus:   summary.MemoryTrustBonus,
 		MemoryRecencyBonus: summary.MemoryRecencyBonus,
+		SourceKinds:        summary.SourceKinds,
+		SourceDiversity:    summary.SourceDiversity,
+		DiversityBonus:     summary.DiversityBonus,
 		ConfigPath:         HumanConfigPath(root),
 		HumanConfig:        cfg,
 		SectionProvenance:  summary.SectionProvenance,
@@ -653,15 +668,19 @@ func coverageBonus(text string, terms []string, unit int) int {
 }
 
 func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memoryCandidate, provenance []SectionProvenance, accounting RetrievalAccounting) retrievalSummary {
+	sourceKinds, diversityBonus := sourceDiversitySignals(provenance)
 	if len(terms) == 0 {
 		memBoost, trustBonus, recencyBonus := memoryBonuses(memoryMatches)
 		return retrievalSummary{
-			QualityScore:       len(pack.Sections)*10 + memBoost,
+			QualityScore:       len(pack.Sections)*10 + memBoost + diversityBonus,
 			MemoryMatchCount:   len(memoryMatches),
 			MatchedMemoryIDs:   matchedMemoryIDs(memoryMatches),
 			MemoryBoost:        memBoost,
 			MemoryTrustBonus:   trustBonus,
 			MemoryRecencyBonus: recencyBonus,
+			SourceKinds:        sourceKinds,
+			SourceDiversity:    len(sourceKinds),
+			DiversityBonus:     diversityBonus,
 			SectionProvenance:  provenance,
 			Accounting:         accounting,
 		}
@@ -706,7 +725,7 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 	}
 	memBoost, trustBonus, recencyBonus := memoryBonuses(memoryMatches)
 	return retrievalSummary{
-		QualityScore:       covered*100 + len(matchedSections)*12 + bonus + memBoost,
+		QualityScore:       covered*100 + len(matchedSections)*12 + bonus + memBoost + diversityBonus,
 		TermCoverage:       covered,
 		MatchedSections:    matchedSections,
 		MemoryMatchCount:   len(memoryMatches),
@@ -714,8 +733,65 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 		MemoryBoost:        memBoost,
 		MemoryTrustBonus:   trustBonus,
 		MemoryRecencyBonus: recencyBonus,
+		SourceKinds:        sourceKinds,
+		SourceDiversity:    len(sourceKinds),
+		DiversityBonus:     diversityBonus,
 		SectionProvenance:  provenance,
 		Accounting:         accounting,
+	}
+}
+
+func sourceDiversitySignals(provenance []SectionProvenance) ([]string, int) {
+	if len(provenance) == 0 {
+		return nil, 0
+	}
+	seen := map[string]bool{}
+	ordered := []string{}
+	for _, section := range provenance {
+		if section.SelectedCount <= 0 {
+			continue
+		}
+		kind := sectionSourceKind(section.Title)
+		if kind == "" || seen[kind] {
+			continue
+		}
+		seen[kind] = true
+		ordered = append(ordered, kind)
+	}
+	if len(ordered) == 0 {
+		return nil, 0
+	}
+	bonus := len(ordered) * 14
+	if seen["docs"] && seen["code"] {
+		bonus += 12
+	}
+	if seen["memory"] && (seen["docs"] || seen["code"]) {
+		bonus += 8
+	}
+	if seen["changes"] && (seen["docs"] || seen["code"]) {
+		bonus += 6
+	}
+	return ordered, bonus
+}
+
+func sectionSourceKind(title string) string {
+	switch title {
+	case "Relevant Docs", "All Docs Snapshot":
+		return "docs"
+	case "Relevant Code Surfaces", "All Code Snapshot":
+		return "code"
+	case "Recent Changes":
+		return "changes"
+	case "Relevant Memory", "Memory Summary", "Memory Snapshot":
+		return "memory"
+	case "Dependencies Snapshot":
+		return "dependencies"
+	case "Index Summary":
+		return "index"
+	case "Task Brief", "Query Signals":
+		return "task"
+	default:
+		return ""
 	}
 }
 

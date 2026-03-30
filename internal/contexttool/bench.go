@@ -45,6 +45,9 @@ type BenchSummary struct {
 	OptimizedMemoryMatches      int      `json:"optimized_memory_matches"`
 	OptimizedMemoryTrustBonus   int      `json:"optimized_memory_trust_bonus"`
 	OptimizedMemoryRecencyBonus int      `json:"optimized_memory_recency_bonus"`
+	BaselineSourceDiversity     int      `json:"baseline_source_diversity"`
+	OptimizedSourceDiversity    int      `json:"optimized_source_diversity"`
+	OptimizedDiversityBonus     int      `json:"optimized_diversity_bonus"`
 	BaselineCandidateTotal      int      `json:"baseline_candidate_total"`
 	BaselineSelectedTotal       int      `json:"baseline_selected_total"`
 	OptimizedCandidateTotal     int      `json:"optimized_candidate_total"`
@@ -110,6 +113,9 @@ func Bench(root string, task string) (BenchResult, error) {
 		OptimizedMemoryMatches:      optimizedSummary.MemoryMatchCount,
 		OptimizedMemoryTrustBonus:   optimizedSummary.MemoryTrustBonus,
 		OptimizedMemoryRecencyBonus: optimizedSummary.MemoryRecencyBonus,
+		BaselineSourceDiversity:     baselineSummary.SourceDiversity,
+		OptimizedSourceDiversity:    optimizedSummary.SourceDiversity,
+		OptimizedDiversityBonus:     optimizedSummary.DiversityBonus,
 		BaselineCandidateTotal:      baselineSummary.Accounting.CandidateTotal,
 		BaselineSelectedTotal:       baselineSummary.Accounting.SelectedTotal,
 		OptimizedCandidateTotal:     optimizedSummary.Accounting.CandidateTotal,

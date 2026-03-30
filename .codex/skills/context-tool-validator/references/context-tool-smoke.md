@@ -11,6 +11,9 @@
 - `assemble` writes `context_pack.json`, `context_pack.md`, and `metadata.json`, and the result reports `config_path` plus the resolved human config.
 - `assemble` metadata records `section_provenance` and aggregate `accounting`.
 - `assemble` metadata records reuse evidence via `reuse.index_source`, `reuse.memory_source`, and `reuse.reused_artifact_count`.
+- `assemble` metadata records diversity evidence via `source_kinds`, `source_diversity`, and `diversity_bonus`.
 - `bench` writes baseline, optimized, and summary artifacts, and the summary includes candidate-vs-final totals plus reuse-source fields for both strategies.
+- `bench` summary also includes diversity fields such as `baseline_source_diversity`, `optimized_source_diversity`, and `optimized_diversity_bonus`.
 - ARC run path can still mirror selected `ctx` artifacts into `.arc/runs/...`.
 - ARC run metadata mirrors top-level `ctx` reuse fields such as `context_ctx_index_source` and `context_ctx_reused_artifact_count`.
+- ARC run metadata mirrors top-level diversity fields such as `context_ctx_source_diversity` and `context_ctx_diversity_bonus`.

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"agent-os/internal/contextpack"
 	"agent-os/internal/indexer"
 	"agent-os/internal/memory"
 )
@@ -220,6 +221,9 @@ func TestAssembleWritesArtifacts(t *testing.T) {
 	}
 	if meta.Reuse.IndexSource == "" || meta.Reuse.MemorySource == "" {
 		t.Fatalf("expected reuse summary in metadata: %#v", meta.Reuse)
+	}
+	if meta.SourceDiversity <= 0 || meta.DiversityBonus <= 0 {
+		t.Fatalf("expected positive diversity metadata: diversity=%d bonus=%d", meta.SourceDiversity, meta.DiversityBonus)
 	}
 }
 
@@ -551,6 +555,34 @@ func TestRenderRelevantCodePrefersMatchingSymbolName(t *testing.T) {
 	}
 	if strings.Index(rendered.Content, "ApplyPresetEnvironmentRules") > strings.Index(rendered.Content, "HandleStuff") && strings.Contains(rendered.Content, "HandleStuff") {
 		t.Fatalf("expected stronger symbol match to rank ahead of weak symbol match: %s", rendered.Content)
+	}
+}
+
+func TestSummarizePackRewardsSourceDiversity(t *testing.T) {
+	pack := contextpack.Pack{
+		Task: "explain context selection",
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Relevant Docs", Content: "context selection docs"},
+			{Title: "Relevant Code Surfaces", Content: "context selection code"},
+			{Title: "Relevant Memory", Content: "context selection memory"},
+		},
+	}
+	provenance := []SectionProvenance{
+		{Title: "Task Brief", SelectedCount: 1},
+		{Title: "Relevant Docs", SelectedCount: 2},
+		{Title: "Relevant Code Surfaces", SelectedCount: 3},
+		{Title: "Relevant Memory", SelectedCount: 1},
+	}
+	summary := summarizePack(pack, []string{"context", "selection"}, nil, provenance, RetrievalAccounting{})
+	if summary.SourceDiversity < 3 {
+		t.Fatalf("expected source diversity >= 3, got %d", summary.SourceDiversity)
+	}
+	if summary.DiversityBonus <= 0 {
+		t.Fatalf("expected positive diversity bonus")
+	}
+	if !contains(summary.SourceKinds, "docs") || !contains(summary.SourceKinds, "code") || !contains(summary.SourceKinds, "memory") {
+		t.Fatalf("expected docs/code/memory source kinds, got %v", summary.SourceKinds)
 	}
 }
 

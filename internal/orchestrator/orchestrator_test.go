@@ -109,6 +109,12 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 	if got := run.Metadata["context_ctx_reused_artifact_count"]; got == "" {
 		t.Fatal("expected context_ctx_reused_artifact_count metadata to be populated")
 	}
+	if got := run.Metadata["context_ctx_source_diversity"]; got == "" {
+		t.Fatal("expected context_ctx_source_diversity metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_diversity_bonus"]; got == "" {
+		t.Fatal("expected context_ctx_diversity_bonus metadata to be populated")
+	}
 
 	var ctxMeta map[string]any
 	if err := project.ReadJSON(run.Artifacts["ctx_context_metadata.json"], &ctxMeta); err != nil {
@@ -681,6 +687,42 @@ func TestChooseContextPackPrefersCtxForMemoryMatchesWithinExtendedWindow(t *test
 	}
 	if selection.CtxMemoryMatches != 1 {
 		t.Fatalf("CtxMemoryMatches = %d, want 1", selection.CtxMemoryMatches)
+	}
+}
+
+func TestChooseContextPackPrefersCtxForDiverseSourcesWithinExtendedWindow(t *testing.T) {
+	arcPack := contextpack.Pack{
+		Task:         "explain context selection",
+		ApproxTokens: 1000,
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Mode Policy", Content: "generic work mode"},
+		},
+	}
+	ctxPack := contextpack.Pack{
+		Task:         "explain context selection",
+		ApproxTokens: 1170,
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Relevant Docs", Content: "context selection docs"},
+			{Title: "Relevant Code Surfaces", Content: "context selection code"},
+			{Title: "Relevant Memory", Content: "context selection memory"},
+		},
+	}
+	selection := chooseContextPack(arcPack, contexttool.AssembleResult{
+		Pack:            ctxPack,
+		QualityScore:    430,
+		SourceDiversity: 3,
+		DiversityBonus:  70,
+	})
+	if selection.SelectedSource != "ctx" {
+		t.Fatalf("SelectedSource = %q, want ctx", selection.SelectedSource)
+	}
+	if selection.SelectionReason != "ctx_diverse_sources_within_extended_token_window" {
+		t.Fatalf("SelectionReason = %q, want ctx_diverse_sources_within_extended_token_window", selection.SelectionReason)
+	}
+	if selection.CtxSourceDiversity != 3 {
+		t.Fatalf("CtxSourceDiversity = %d, want 3", selection.CtxSourceDiversity)
 	}
 }
 
