@@ -54,6 +54,13 @@ func Add(root string, item Item) error {
 	return Save(root, items)
 }
 
+func AddAllowed(root string, item Item, allowedScopes []string) error {
+	if !scopeAllowed(item.Scope, allowedScopes) {
+		return fmt.Errorf("memory scope %q is not allowed by the active memory policy", item.Scope)
+	}
+	return Add(root, item)
+}
+
 func Compact(root string) (Summary, error) {
 	items, err := Load(root)
 	if err != nil {
@@ -173,4 +180,17 @@ func dedupe(items []Item) []Item {
 		out = append(out, item)
 	}
 	return out
+}
+
+func scopeAllowed(scope string, allowedScopes []string) bool {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return false
+	}
+	for _, allowed := range allowedScopes {
+		if scope == strings.TrimSpace(allowed) {
+			return true
+		}
+	}
+	return false
 }

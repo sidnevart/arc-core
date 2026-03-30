@@ -26,6 +26,10 @@ func Run(args []string) error {
 		return runIndex(args[1:])
 	case "task":
 		return runTask(args[1:])
+	case "budget":
+		return runBudget(args[1:])
+	case "hook":
+		return runHook(args[1:])
 	case "preset":
 		return runPreset(args[1:])
 	case "docs":
@@ -63,10 +67,17 @@ func printUsage() {
 	fmt.Println("  arc mode show [--path DIR] [--json]")
 	fmt.Println("  arc index build [--path DIR]")
 	fmt.Println("  arc index refresh [--path DIR]")
-	fmt.Println("  arc task plan [--path DIR] [--mode MODE] [--provider NAME] <task>")
-	fmt.Println("  arc task run [--path DIR] [--mode MODE] [--provider NAME] [--dry-run] [--run-checks] [--approve-risky] [--provider-timeout DURATION] <task>")
+	fmt.Println("  arc task plan [--path DIR] [--mode MODE] [--provider NAME] [--budget-mode MODE] <task>")
+	fmt.Println("  arc task run [--path DIR] [--mode MODE] [--provider NAME] [--budget-mode MODE] [--budget-override-file FILE] [--dry-run] [--run-checks] [--approve-risky] [--provider-timeout DURATION] <task>")
+	fmt.Println("  arc budget show [--path DIR] [--json]")
+	fmt.Println("  arc budget override set [--path DIR] [--mode MODE] [--low-limit-state STATE] [--prefer-local true|false] [--block-premium-high-risk true|false] [--block-premium-required true|false] [--require-approval-for-premium-high-risk true|false] [--require-approval-for-premium-required true|false] [--note TEXT] [--json]")
+	fmt.Println("  arc budget override clear [--path DIR] [--json]")
+	fmt.Println("  arc budget session show --file FILE [--json]")
+	fmt.Println("  arc budget session write --file FILE [--mode MODE] [--low-limit-state STATE] [--prefer-local true|false] [--block-premium-high-risk true|false] [--block-premium-required true|false] [--require-approval-for-premium-high-risk true|false] [--require-approval-for-premium-required true|false] [--note TEXT] [--json]")
+	fmt.Println("  arc budget session clear --file FILE [--json]")
 	fmt.Println("  arc task verify [--path DIR] [--run-id ID] [--run-checks]")
 	fmt.Println("  arc task review [--path DIR] [--run-id ID]")
+	fmt.Println("  arc hook memory add [--path DIR] --scope SCOPE [--kind KIND] [--tags a,b] [--json] <summary>")
 	fmt.Println("  arc preset list [--root DIR] [--json]")
 	fmt.Println("  arc preset validate [--root DIR] [--json] <preset-id>")
 	fmt.Println("  arc preset preview [--root DIR] [--path DIR] [--json] <preset-id>")

@@ -10,12 +10,16 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
+	"agent-os/internal/budget"
 	"agent-os/internal/contextpack"
+	"agent-os/internal/contexttool"
 	"agent-os/internal/governance"
 	"agent-os/internal/indexer"
 	"agent-os/internal/memory"
 	"agent-os/internal/mode"
+	"agent-os/internal/presets"
 	"agent-os/internal/project"
 	"agent-os/internal/provider"
 )
@@ -75,6 +79,8 @@ type TaskOptions struct {
 	Task            string
 	Mode            string
 	Provider        string
+	BudgetMode      string
+	BudgetOverride  string
 	Model           string
 	DryRun          bool
 	RunChecks       bool
@@ -89,6 +95,23 @@ type VerifyOptions struct {
 	RunChecks bool
 }
 
+type ContextSelection struct {
+	SelectedSource        string           `json:"selected_source"`
+	SelectionReason       string           `json:"selection_reason"`
+	Selected              contextpack.Pack `json:"selected"`
+	ArcPack               contextpack.Pack `json:"arc_pack"`
+	CtxPack               contextpack.Pack `json:"ctx_pack"`
+	ArcTokens             int              `json:"arc_tokens"`
+	CtxTokens             int              `json:"ctx_tokens"`
+	TokenReduction        int              `json:"token_reduction"`
+	ArcQuality            int              `json:"arc_quality"`
+	CtxQuality            int              `json:"ctx_quality"`
+	CtxMemoryMatches      int              `json:"ctx_memory_matches"`
+	CtxMemoryBoost        int              `json:"ctx_memory_boost"`
+	CtxMemoryTrustBonus   int              `json:"ctx_memory_trust_bonus"`
+	CtxMemoryRecencyBonus int              `json:"ctx_memory_recency_bonus"`
+}
+
 func Plan(root string, opts TaskOptions) (Run, error) {
 	run := newRun("task plan", opts)
 	if err := saveRun(root, &run); err != nil {
@@ -99,20 +122,52 @@ func Plan(root string, opts TaskOptions) (Run, error) {
 	if err := transition(root, &run, StateContextCollecting, "collecting project context"); err != nil {
 		return Run{}, err
 	}
-	idx, items, pack, err := collectContext(root, opts.Task, opts.Mode)
+	resolution, err := resolveRunEnvironment(root)
+	if err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	if err := writeEnvironmentArtifacts(root, &run, resolution); err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	memoryPolicy, err := writeMemoryPolicyArtifacts(root, &run, resolution)
+	if err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "before_context_assembly", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
+	}
+	idx, items, pack, ctxResult, selection, err := collectContext(root, opts.Task, opts.Mode)
 	if err != nil {
 		_ = failRun(root, &run, err)
 		return Run{}, err
 	}
 
-	if err := writeContextArtifacts(root, &run, idx, items, pack); err != nil {
+	if err := writeContextArtifacts(root, &run, idx, items, pack, ctxResult, selection); err != nil {
 		return Run{}, err
+	}
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "after_context_assembly", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
 	}
 	if err := transition(root, &run, StatePlanning, "writing planning artifacts"); err != nil {
 		return Run{}, err
 	}
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "before_persist_memory", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
+	}
 
-	if err := writePlanningArtifacts(root, &run, opts.Task, pack); err != nil {
+	if err := writePlanningArtifacts(root, &run, opts.Task, pack, memoryPolicy); err != nil {
 		_ = failRun(root, &run, err)
 		return Run{}, err
 	}
@@ -127,29 +182,211 @@ func Plan(root string, opts TaskOptions) (Run, error) {
 func RunTask(root string, opts TaskOptions) (Run, error) {
 	run := newRun("task run", opts)
 	providerFailed := false
+	var budgetAssessment *budget.Assessment
+	var effectiveBudgetMode budget.Mode
+	var providerUsed bool
+	effectiveUseProvider := opts.UseProvider
+	budgetNotes := []string{}
+	budgetModeSource := "default"
 	if err := saveRun(root, &run); err != nil {
 		return Run{}, err
 	}
+	defer func() {
+		if budgetAssessment == nil {
+			return
+		}
+		event := budget.NewUsageEvent(run.ID, budget.Request{
+			Task:        run.Task,
+			Provider:    run.Provider,
+			UseProvider: effectiveUseProvider,
+			DryRun:      opts.DryRun,
+			BudgetMode:  string(effectiveBudgetMode),
+		}, *budgetAssessment, run.Status, providerUsed, run.ProviderResult, budgetNotes...)
+		_ = budget.AppendUsageEvent(root, event)
+		eventPath := filepath.Join(runDir(root, run.ID), "budget_usage_event.json")
+		_ = project.WriteJSON(eventPath, event)
+		run.Artifacts["budget_usage_event.json"] = eventPath
+		_ = saveRun(root, &run)
+	}()
 	_ = appendTrace(root, run.ID, TraceEvent{Timestamp: nowUTC(), Type: "run_created", Message: "task run created"})
 
 	if err := transition(root, &run, StateContextCollecting, "collecting project context"); err != nil {
 		return Run{}, err
 	}
-	idx, items, pack, err := collectContext(root, opts.Task, opts.Mode)
+	resolution, err := resolveRunEnvironment(root)
 	if err != nil {
 		_ = failRun(root, &run, err)
 		return Run{}, err
 	}
-	if err := writeContextArtifacts(root, &run, idx, items, pack); err != nil {
+	if err := writeEnvironmentArtifacts(root, &run, resolution); err != nil {
+		_ = failRun(root, &run, err)
 		return Run{}, err
+	}
+	memoryPolicy, err := writeMemoryPolicyArtifacts(root, &run, resolution)
+	if err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "before_context_assembly", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
+	}
+	idx, items, pack, ctxResult, selection, err := collectContext(root, opts.Task, opts.Mode)
+	if err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	if err := writeContextArtifacts(root, &run, idx, items, pack, ctxResult, selection); err != nil {
+		return Run{}, err
+	}
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "after_context_assembly", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
 	}
 
 	if err := transition(root, &run, StatePlanning, "building specs and question bundle"); err != nil {
 		return Run{}, err
 	}
-	if err := writePlanningArtifacts(root, &run, opts.Task, pack); err != nil {
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "before_persist_memory", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
+	}
+	if err := writePlanningArtifacts(root, &run, opts.Task, pack, memoryPolicy); err != nil {
 		_ = failRun(root, &run, err)
 		return Run{}, err
+	}
+
+	reqBudget := budget.Request{
+		Task:        opts.Task,
+		Provider:    opts.Provider,
+		UseProvider: opts.UseProvider,
+		DryRun:      opts.DryRun,
+	}
+	policyResolution, err := budget.ResolvePolicy(root, opts.BudgetMode, resolution.EffectiveBudgetProfile, opts.BudgetOverride)
+	if err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	effectiveBudgetMode = policyResolution.EffectiveMode
+	budgetModeSource = policyResolution.EffectiveModeSource
+	reqBudget.BudgetMode = string(effectiveBudgetMode)
+	policy := policyResolution.EffectivePolicy
+	assessedBudget := budget.AssessWithPolicy(reqBudget, policy)
+	budgetAssessment = &assessedBudget
+	budgetPath := filepath.Join(runDir(root, run.ID), "budget_assessment.json")
+	if err := project.WriteJSON(budgetPath, map[string]any{
+		"policy":                     policy,
+		"policy_resolution":          policyResolution,
+		"assessment":                 assessedBudget,
+		"provider":                   opts.Provider,
+		"task":                       opts.Task,
+		"requested_budget_mode":      opts.BudgetMode,
+		"environment_budget_profile": resolution.EffectiveBudgetProfile,
+		"budget_mode_source":         budgetModeSource,
+		"budget_mode":                assessedBudget.Mode,
+		"budget_override_path":       opts.BudgetOverride,
+		"project_override_present":   policyResolution.ProjectOverridePresent,
+		"session_override_present":   policyResolution.SessionOverridePresent,
+		"applied_override_sources":   policyResolution.AppliedOverrideSources,
+		"project_override_path":      policyResolution.ProjectOverridePath,
+		"session_override_path":      policyResolution.SessionOverridePath,
+	}); err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	run.Artifacts["budget_assessment.json"] = budgetPath
+	policyResolutionPath := filepath.Join(runDir(root, run.ID), "budget_policy_resolution.json")
+	if err := project.WriteJSON(policyResolutionPath, policyResolution); err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	run.Artifacts["budget_policy_resolution.json"] = policyResolutionPath
+	run.Metadata["budget_requested_mode"] = opts.BudgetMode
+	run.Metadata["budget_override_path"] = opts.BudgetOverride
+	run.Metadata["budget_mode"] = string(assessedBudget.Mode)
+	run.Metadata["budget_mode_source"] = budgetModeSource
+	run.Metadata["budget_project_override_present"] = fmt.Sprintf("%t", policyResolution.ProjectOverridePresent)
+	run.Metadata["budget_session_override_present"] = fmt.Sprintf("%t", policyResolution.SessionOverridePresent)
+	run.Metadata["budget_override_sources"] = strings.Join(policyResolution.AppliedOverrideSources, ",")
+	run.Metadata["budget_low_limit_state"] = string(assessedBudget.LowLimitState)
+	run.Metadata["budget_classification"] = string(assessedBudget.Classification)
+	run.Metadata["budget_confidence"] = fmt.Sprintf("%d", assessedBudget.Confidence)
+	run.Metadata["budget_confidence_tier"] = assessedBudget.ConfidenceTier
+	run.Metadata["budget_matched_signals"] = strings.Join(assessedBudget.MatchedSignals, ",")
+	run.Metadata["budget_signal_breakdown"] = formatBudgetBreakdown(assessedBudget.SignalBreakdown)
+	run.Metadata["budget_requires_approval"] = fmt.Sprintf("%t", assessedBudget.RequiresApproval)
+	run.Metadata["budget_should_block"] = fmt.Sprintf("%t", assessedBudget.ShouldBlock)
+	run.Metadata["budget_route_locally"] = fmt.Sprintf("%t", assessedBudget.RouteLocally)
+	run.Metadata["budget_routing_reason"] = assessedBudget.RoutingReason
+	run.Metadata["budget_routing_trigger"] = assessedBudget.RoutingTrigger
+	_ = appendTrace(root, run.ID, TraceEvent{
+		Timestamp: nowUTC(),
+		Type:      "budget_assessment",
+		Message:   "budget assessment completed",
+		Data: map[string]any{
+			"budget_mode":        assessedBudget.Mode,
+			"budget_mode_source": budgetModeSource,
+			"project_override":   policyResolution.ProjectOverridePresent,
+			"session_override":   policyResolution.SessionOverridePresent,
+			"low_limit_state":    assessedBudget.LowLimitState,
+			"classification":     assessedBudget.Classification,
+			"confidence":         assessedBudget.Confidence,
+			"confidence_tier":    assessedBudget.ConfidenceTier,
+			"matched_signals":    assessedBudget.MatchedSignals,
+			"signal_breakdown":   assessedBudget.SignalBreakdown,
+			"requires_approval":  assessedBudget.RequiresApproval,
+			"should_block":       assessedBudget.ShouldBlock,
+			"route_locally":      assessedBudget.RouteLocally,
+			"prefer_local":       policy.PreferLocal,
+			"routing_reason":     assessedBudget.RoutingReason,
+			"routing_trigger":    assessedBudget.RoutingTrigger,
+			"reasoning":          assessedBudget.Reasoning,
+		},
+	})
+	_ = saveRun(root, &run)
+	if assessedBudget.ShouldBlock && !opts.ApproveRisky && opts.UseProvider && !opts.DryRun {
+		_ = transition(root, &run, StateBlocked, "budget policy blocked provider execution")
+		run.Status = "blocked"
+		run.Metadata["blocked_reason"] = "budget_policy"
+		_ = saveRun(root, &run)
+		_ = appendTrace(root, run.ID, TraceEvent{Timestamp: nowUTC(), Type: "run_blocked", Message: "task blocked by budget policy"})
+		return run, nil
+	}
+	if assessedBudget.RequiresApproval && !opts.ApproveRisky && opts.UseProvider && !opts.DryRun {
+		_ = transition(root, &run, StateBlocked, "budget policy requires approval")
+		run.Status = "blocked"
+		run.Metadata["blocked_reason"] = "budget_approval_required"
+		_ = saveRun(root, &run)
+		_ = appendTrace(root, run.ID, TraceEvent{Timestamp: nowUTC(), Type: "run_blocked", Message: "task blocked until budget approval is granted"})
+		return run, nil
+	}
+
+	if assessedBudget.RouteLocally && opts.UseProvider {
+		effectiveUseProvider = false
+		budgetNotes = append(budgetNotes, assessedBudget.RoutingReason)
+		run.Metadata["provider_execution_mode"] = "local_routed"
+		_ = saveRun(root, &run)
+		_ = appendTrace(root, run.ID, TraceEvent{
+			Timestamp: nowUTC(),
+			Type:      "budget_routing",
+			Message:   "provider execution rerouted to local-only path",
+			Data: map[string]any{
+				"classification": assessedBudget.Classification,
+				"reason":         assessedBudget.RoutingReason,
+				"budget_mode":    assessedBudget.Mode,
+			},
+		})
+	} else if opts.UseProvider {
+		run.Metadata["provider_execution_mode"] = "provider"
+	} else {
+		effectiveUseProvider = false
+		run.Metadata["provider_execution_mode"] = "local_only"
 	}
 
 	assessment := governance.Assess(opts.Task)
@@ -169,7 +406,7 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 	})
 	run.Metadata["risk_level"] = assessment.RiskLevel
 	run.Metadata["requires_approval"] = fmt.Sprintf("%t", assessment.RequiresApproval)
-	if assessment.RequiresApproval && !opts.ApproveRisky && opts.UseProvider && !opts.DryRun {
+	if assessment.RequiresApproval && !opts.ApproveRisky && effectiveUseProvider && !opts.DryRun {
 		_ = transition(root, &run, StateBlocked, "approval gate triggered")
 		run.Status = "blocked"
 		run.Metadata["blocked_reason"] = "approval_required"
@@ -181,11 +418,17 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 	if err := transition(root, &run, StateImplementing, "executing implementation stage"); err != nil {
 		return Run{}, err
 	}
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "before_run", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
+	}
 	if err := writeImplementationLog(root, &run, "Implementation stage started."); err != nil {
 		return Run{}, err
 	}
 
-	if opts.UseProvider && !opts.DryRun {
+	if effectiveUseProvider && !opts.DryRun {
 		adapter, err := provider.Get(opts.Provider)
 		if err != nil {
 			_ = failRun(root, &run, err)
@@ -197,7 +440,7 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 			run.Status = "blocked"
 			run.Metadata["blocked_reason"] = "provider_unavailable"
 			_ = saveRun(root, &run)
-			_ = writeQuestionBundle(root, &run, []string{"Selected provider is unavailable. Install it or rerun with --dry-run."})
+			_ = writeQuestionBundle(root, &run, []string{"Selected provider is unavailable. Install it or rerun with --dry-run."}, memoryPolicy)
 			return run, nil
 		}
 
@@ -213,6 +456,7 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 			Timeout:        opts.ProviderTimeout,
 		}
 		result, err := adapter.RunTask(context.Background(), req)
+		providerUsed = true
 		run.ProviderResult = &result
 		if result.SessionID != "" {
 			run.ProviderSessionID = result.SessionID
@@ -244,6 +488,12 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 			run.Metadata["provider_error"] = err.Error()
 			_ = saveRun(root, &run)
 		}
+	}
+	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "after_run", opts); err != nil {
+		return Run{}, err
+	}
+	if run.Status == "blocked" {
+		return run, nil
 	}
 
 	if err := transition(root, &run, StateVerifying, "producing verification report"); err != nil {
@@ -643,24 +893,138 @@ func failRun(root string, run *Run, err error) error {
 	return saveRun(root, run)
 }
 
-func collectContext(root string, task string, modeName string) (indexer.Result, []memory.Item, contextpack.Pack, error) {
-	idx, err := indexer.Build(root)
+func formatBudgetBreakdown(breakdown map[string]int) string {
+	if len(breakdown) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(breakdown))
+	for key := range breakdown {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", key, breakdown[key]))
+	}
+	return strings.Join(parts, ",")
+}
+
+func resolveRunEnvironment(root string) (presets.EnvironmentResolution, error) {
+	return presets.ResolveEnvironment(root, "", nil)
+}
+
+func writeEnvironmentArtifacts(root string, run *Run, resolution presets.EnvironmentResolution) error {
+	dir := runDir(root, run.ID)
+	jsonPath := filepath.Join(dir, "environment_resolution.json")
+	mdPath := filepath.Join(dir, "environment_resolution.md")
+	if err := project.WriteJSON(jsonPath, resolution); err != nil {
+		return err
+	}
+	if err := project.WriteString(mdPath, presets.RenderEnvironmentResolutionMarkdown(resolution)); err != nil {
+		return err
+	}
+	run.Artifacts["environment_resolution.json"] = jsonPath
+	run.Artifacts["environment_resolution.md"] = mdPath
+	run.Metadata["environment_runtime_ceiling"] = resolution.EffectiveRuntimeCeiling
+	run.Metadata["environment_budget_profile"] = resolution.EffectiveBudgetProfile
+	run.Metadata["environment_layer_count"] = fmt.Sprintf("%d", len(resolution.Layers))
+	run.Metadata["environment_hook_count"] = fmt.Sprintf("%d", len(resolution.HookRegistry))
+	_ = appendTrace(root, run.ID, TraceEvent{
+		Timestamp: nowUTC(),
+		Type:      "environment_resolution",
+		Message:   "environment resolution written",
+		Data: map[string]any{
+			"layers":                len(resolution.Layers),
+			"hook_count":            len(resolution.HookRegistry),
+			"runtime_ceiling":       resolution.EffectiveRuntimeCeiling,
+			"budget_profile":        resolution.EffectiveBudgetProfile,
+			"environment_conflicts": resolution.EnvironmentConflicts,
+		},
+	})
+	return saveRun(root, run)
+}
+
+func writeMemoryPolicyArtifacts(root string, run *Run, resolution presets.EnvironmentResolution) (presets.MemoryPolicy, error) {
+	policy := presets.BuildMemoryPolicy(resolution, run.ID)
+	dir := runDir(root, run.ID)
+	jsonPath := filepath.Join(dir, "memory_policy.json")
+	mdPath := filepath.Join(dir, "memory_policy.md")
+	if err := project.WriteJSON(jsonPath, policy); err != nil {
+		return presets.MemoryPolicy{}, err
+	}
+	if err := project.WriteString(mdPath, presets.RenderMemoryPolicyMarkdown(policy)); err != nil {
+		return presets.MemoryPolicy{}, err
+	}
+	run.Artifacts["memory_policy.json"] = jsonPath
+	run.Artifacts["memory_policy.md"] = mdPath
+	run.Metadata["memory_allowed_scope_count"] = fmt.Sprintf("%d", len(policy.AllowedScopes))
+	run.Metadata["memory_system_writable"] = fmt.Sprintf("%t", policy.SystemWritable)
+	return policy, saveRun(root, run)
+}
+
+func runHookLifecycle(root string, run *Run, resolution presets.EnvironmentResolution, memoryPolicy presets.MemoryPolicy, lifecycle string, opts TaskOptions) error {
+	summary, err := presets.ExecuteHooks(resolution, presets.HookRunOptions{
+		RunID:               run.ID,
+		RunDir:              runDir(root, run.ID),
+		Lifecycle:           lifecycle,
+		ApproveRisky:        opts.ApproveRisky,
+		DryRun:              opts.DryRun,
+		WorkspaceRoot:       root,
+		AllowedMemoryScopes: append([]string{}, memoryPolicy.AllowedScopes...),
+	})
+	run.Artifacts["hook_execution.json"] = filepath.Join(runDir(root, run.ID), "hook_execution.json")
+	run.Artifacts["hook_execution.md"] = filepath.Join(runDir(root, run.ID), "hook_execution.md")
+	run.Artifacts["hook_memory_events.jsonl"] = filepath.Join(runDir(root, run.ID), "hook_memory_events.jsonl")
+	if len(summary.Executions) > 0 {
+		run.Metadata["hook_last_lifecycle"] = lifecycle
+		run.Metadata["hook_execution_count"] = fmt.Sprintf("%d", len(summary.Executions))
+		_ = appendTrace(root, run.ID, TraceEvent{
+			Timestamp: nowUTC(),
+			Type:      "hook_execution",
+			Message:   "hook lifecycle processed",
+			Data: map[string]any{
+				"lifecycle": lifecycle,
+				"count":     len(summary.Executions),
+			},
+		})
+		_ = saveRun(root, run)
+	}
+	if err == nil {
+		return nil
+	}
+	if hookErr, ok := err.(presets.HookExecutionError); ok && hookErr.RequiresApproval {
+		_ = transition(root, run, StateBlocked, hookErr.Message)
+		run.Status = "blocked"
+		run.Metadata["blocked_reason"] = "hook_approval_required"
+		_ = saveRun(root, run)
+		return nil
+	}
+	_ = failRun(root, run, err)
+	return err
+}
+
+func collectContext(root string, task string, modeName string) (indexer.Result, []memory.Item, contextpack.Pack, contexttool.AssembleResult, ContextSelection, error) {
+	idx, err := contexttool.BuildIndex(root)
 	if err != nil {
-		return indexer.Result{}, nil, contextpack.Pack{}, err
+		return indexer.Result{}, nil, contextpack.Pack{}, contexttool.AssembleResult{}, ContextSelection{}, err
 	}
 	_ = indexer.WriteIndividual(root, idx)
 	_ = indexer.Save(root, idx)
-
 	items, err := memory.Load(root)
 	if err != nil {
-		return indexer.Result{}, nil, contextpack.Pack{}, err
+		return indexer.Result{}, nil, contextpack.Pack{}, contexttool.AssembleResult{}, ContextSelection{}, err
 	}
 	modeDef := mode.ByName(modeName)
-	pack := contextpack.Build(root, task, modeDef, idx, items)
-	return idx, items, pack, nil
+	arcPack := contextpack.Build(root, task, modeDef, idx, items)
+	ctxResult, err := contexttool.Assemble(root, task)
+	if err != nil {
+		return indexer.Result{}, nil, contextpack.Pack{}, contexttool.AssembleResult{}, ContextSelection{}, err
+	}
+	selection := chooseContextPack(arcPack, ctxResult)
+	return idx, items, selection.Selected, ctxResult, selection, nil
 }
 
-func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []memory.Item, pack contextpack.Pack) error {
+func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []memory.Item, pack contextpack.Pack, ctxResult contexttool.AssembleResult, selection ContextSelection) error {
 	dir := runDir(root, run.ID)
 	if err := project.WriteJSON(filepath.Join(dir, "index_snapshot.json"), idx); err != nil {
 		return err
@@ -674,12 +1038,199 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 	if err := project.WriteString(filepath.Join(dir, "context_pack.md"), contextpack.Markdown(pack)); err != nil {
 		return err
 	}
+	if err := project.WriteJSON(filepath.Join(dir, "arc_context_pack.json"), selection.ArcPack); err != nil {
+		return err
+	}
+	if err := project.WriteString(filepath.Join(dir, "arc_context_pack.md"), contextpack.Markdown(selection.ArcPack)); err != nil {
+		return err
+	}
+	if err := project.WriteJSON(filepath.Join(dir, "ctx_context_pack.json"), ctxResult.Pack); err != nil {
+		return err
+	}
+	if err := project.WriteString(filepath.Join(dir, "ctx_context_pack.md"), contextpack.Markdown(ctxResult.Pack)); err != nil {
+		return err
+	}
+	if err := project.WriteJSON(filepath.Join(dir, "ctx_context_metadata.json"), map[string]any{
+		"output_dir":           ctxResult.OutputDir,
+		"built_index":          ctxResult.BuiltIndex,
+		"matched_terms":        ctxResult.MatchedTerms,
+		"quality_score":        ctxResult.QualityScore,
+		"term_coverage":        ctxResult.TermCoverage,
+		"matched_sections":     ctxResult.MatchedSections,
+		"memory_match_count":   ctxResult.MemoryMatchCount,
+		"matched_memory_ids":   ctxResult.MatchedMemoryIDs,
+		"memory_boost":         ctxResult.MemoryBoost,
+		"memory_trust_bonus":   ctxResult.MemoryTrustBonus,
+		"memory_recency_bonus": ctxResult.MemoryRecencyBonus,
+		"pack_json":            ctxResult.PackJSONPath,
+		"pack_md":              ctxResult.PackMDPath,
+		"metadata":             ctxResult.MetadataPath,
+	}); err != nil {
+		return err
+	}
+	if err := project.WriteJSON(filepath.Join(dir, "context_selection.json"), selection); err != nil {
+		return err
+	}
 	run.Artifacts["context_pack.md"] = filepath.Join(dir, "context_pack.md")
 	run.Artifacts["context_pack.json"] = filepath.Join(dir, "context_pack.json")
+	run.Artifacts["arc_context_pack.md"] = filepath.Join(dir, "arc_context_pack.md")
+	run.Artifacts["arc_context_pack.json"] = filepath.Join(dir, "arc_context_pack.json")
+	run.Artifacts["ctx_context_pack.md"] = filepath.Join(dir, "ctx_context_pack.md")
+	run.Artifacts["ctx_context_pack.json"] = filepath.Join(dir, "ctx_context_pack.json")
+	run.Artifacts["ctx_context_metadata.json"] = filepath.Join(dir, "ctx_context_metadata.json")
+	run.Artifacts["context_selection.json"] = filepath.Join(dir, "context_selection.json")
+	run.Metadata["context_source"] = selection.SelectedSource
+	run.Metadata["context_arc_tokens"] = fmt.Sprintf("%d", selection.ArcTokens)
+	run.Metadata["context_ctx_tokens"] = fmt.Sprintf("%d", selection.CtxTokens)
+	run.Metadata["context_token_reduction"] = fmt.Sprintf("%d", selection.TokenReduction)
+	run.Metadata["context_arc_quality"] = fmt.Sprintf("%d", selection.ArcQuality)
+	run.Metadata["context_ctx_quality"] = fmt.Sprintf("%d", selection.CtxQuality)
+	run.Metadata["context_ctx_memory_matches"] = fmt.Sprintf("%d", selection.CtxMemoryMatches)
+	run.Metadata["context_ctx_memory_boost"] = fmt.Sprintf("%d", selection.CtxMemoryBoost)
+	run.Metadata["context_ctx_memory_trust_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryTrustBonus)
+	run.Metadata["context_ctx_memory_recency_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryRecencyBonus)
+	run.Metadata["context_selection_reason"] = selection.SelectionReason
 	return saveRun(root, run)
 }
 
-func writePlanningArtifacts(root string, run *Run, task string, pack contextpack.Pack) error {
+func chooseContextPack(arcPack contextpack.Pack, ctxResult contexttool.AssembleResult) ContextSelection {
+	ctxPack := ctxResult.Pack
+	selected := arcPack
+	source := "arc"
+	reason := "arc_default"
+	arcQuality := estimatePackQuality(arcPack)
+	ctxQuality := ctxResult.QualityScore
+	if ctxQuality == 0 {
+		ctxQuality = estimatePackQuality(ctxPack)
+	}
+	if ctxPack.ApproxTokens > 0 && arcPack.ApproxTokens == 0 {
+		selected = ctxPack
+		source = "ctx"
+		reason = "ctx_only_non_zero"
+	} else if ctxPack.ApproxTokens > 0 && ctxPack.ApproxTokens <= arcPack.ApproxTokens && ctxQuality >= arcQuality {
+		selected = ctxPack
+		source = "ctx"
+		reason = "ctx_smaller_or_equal_and_quality_not_worse"
+	} else if ctxPack.ApproxTokens > 0 && withinPercent(ctxPack.ApproxTokens, arcPack.ApproxTokens, 15) && ctxQuality > arcQuality {
+		selected = ctxPack
+		source = "ctx"
+		reason = "ctx_higher_quality_within_token_window"
+	} else if ctxPack.ApproxTokens > 0 && ctxResult.MemoryMatchCount > 0 && withinPercent(ctxPack.ApproxTokens, arcPack.ApproxTokens, 25) && ctxQuality+ctxResult.MemoryBoost >= arcQuality {
+		selected = ctxPack
+		source = "ctx"
+		reason = "ctx_memory_match_within_extended_token_window"
+	} else if arcPack.ApproxTokens > 0 {
+		reason = "arc_kept_for_size_or_quality"
+	}
+	return ContextSelection{
+		SelectedSource:        source,
+		SelectionReason:       reason,
+		Selected:              selected,
+		ArcPack:               arcPack,
+		CtxPack:               ctxPack,
+		ArcTokens:             arcPack.ApproxTokens,
+		CtxTokens:             ctxPack.ApproxTokens,
+		TokenReduction:        arcPack.ApproxTokens - ctxPack.ApproxTokens,
+		ArcQuality:            arcQuality,
+		CtxQuality:            ctxQuality,
+		CtxMemoryMatches:      ctxResult.MemoryMatchCount,
+		CtxMemoryBoost:        ctxResult.MemoryBoost,
+		CtxMemoryTrustBonus:   ctxResult.MemoryTrustBonus,
+		CtxMemoryRecencyBonus: ctxResult.MemoryRecencyBonus,
+	}
+}
+
+func estimatePackQuality(pack contextpack.Pack) int {
+	terms := selectionTerms(pack.Task)
+	if len(terms) == 0 {
+		return len(pack.Sections) * 10
+	}
+	covered := 0
+	sectionMatches := 0
+	seenSections := map[string]bool{}
+	for _, term := range terms {
+		termLower := strings.ToLower(term)
+		for _, section := range pack.Sections {
+			blob := strings.ToLower(section.Title + "\n" + section.Source + "\n" + section.Content)
+			if strings.Contains(blob, termLower) {
+				if !seenSections[section.Title] {
+					seenSections[section.Title] = true
+					sectionMatches++
+				}
+				covered++
+				break
+			}
+		}
+	}
+	return covered*100 + sectionMatches*12 + qualitySectionBonus(pack)
+}
+
+func qualitySectionBonus(pack contextpack.Pack) int {
+	bonus := 0
+	for _, section := range pack.Sections {
+		switch section.Title {
+		case "Relevant Docs":
+			bonus += 15
+		case "Relevant Code Surfaces":
+			bonus += 20
+		case "Relevant Memory":
+			bonus += 10
+		case "Query Signals":
+			bonus += 10
+		}
+	}
+	return bonus
+}
+
+func selectionTerms(task string) []string {
+	stop := map[string]struct{}{
+		"what": {}, "with": {}, "that": {}, "this": {}, "from": {}, "into": {}, "and": {},
+		"для": {}, "как": {}, "что": {}, "это": {}, "или": {}, "над": {}, "под": {}, "при": {},
+	}
+	seen := map[string]struct{}{}
+	out := []string{}
+	var current []rune
+	flush := func() {
+		if len(current) == 0 {
+			return
+		}
+		token := strings.ToLower(string(current))
+		current = current[:0]
+		if len([]rune(token)) < 3 {
+			return
+		}
+		if _, ok := stop[token]; ok {
+			return
+		}
+		if _, ok := seen[token]; ok {
+			return
+		}
+		seen[token] = struct{}{}
+		out = append(out, token)
+	}
+	for _, r := range task {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' {
+			current = append(current, r)
+			continue
+		}
+		flush()
+	}
+	flush()
+	return out
+}
+
+func withinPercent(a int, b int, pct int) bool {
+	if a <= 0 || b <= 0 {
+		return false
+	}
+	diff := a - b
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff*100 <= b*pct
+}
+
+func writePlanningArtifacts(root string, run *Run, task string, pack contextpack.Pack, memoryPolicy presets.MemoryPolicy) error {
 	modeDef := mode.ByName(run.Mode)
 	switch run.Mode {
 	case "study":
@@ -693,7 +1244,7 @@ func writePlanningArtifacts(root string, run *Run, task string, pack contextpack
 		writeArtifact(root, run, "business_spec.md", heroSpec("Business Spec", task, pack))
 		writeArtifact(root, run, "tech_spec.md", heroSpec("Tech Spec", task, pack))
 		writeArtifact(root, run, "unknowns.md", "# Unknowns\n\n- `UNKNOWN` Fill with missing evidence discovered during planning.\n")
-		writeQuestionBundle(root, run, []string{"What repo-specific rules or architectural constraints are still missing from AGENTS/docs/maps?"})
+		writeQuestionBundle(root, run, []string{"What repo-specific rules or architectural constraints are still missing from AGENTS/docs/maps?"}, memoryPolicy)
 	default:
 		writeArtifact(root, run, "task_map.md", "# Task Map\n\n"+task+"\n")
 		writeArtifact(root, run, "system_flow.md", "# System Flow\n\n- Summarize impacted system surfaces from the context pack.\n")
@@ -702,9 +1253,9 @@ func writePlanningArtifacts(root string, run *Run, task string, pack contextpack
 		writeArtifact(root, run, "validation_checklist.md", "# Validation Checklist\n\n- Build\n- Tests\n- Docs update\n")
 	}
 
-	_ = memory.Add(root, memory.Item{
+	_ = memory.AddAllowed(root, memory.Item{
 		ID:             "run-" + run.ID,
-		Scope:          "run",
+		Scope:          "runs/" + run.ID,
 		Kind:           "fact",
 		Source:         "task pipeline",
 		Confidence:     "high",
@@ -713,7 +1264,7 @@ func writePlanningArtifacts(root string, run *Run, task string, pack contextpack
 		Status:         "active",
 		Tags:           []string{run.Mode, "run"},
 		Summary:        fmt.Sprintf("Run %s planned task: %s", run.ID, task),
-	})
+	}, memoryPolicy.AllowedScopes)
 
 	run.Metadata["active_roles"] = strings.Join(modeDef.Roles, ",")
 	run.Metadata["active_skills"] = strings.Join(skillsForMode(run.Mode), ",")
@@ -783,7 +1334,7 @@ func writeArtifact(root string, run *Run, name string, content string) error {
 	return nil
 }
 
-func writeQuestionBundle(root string, run *Run, questions []string) error {
+func writeQuestionBundle(root string, run *Run, questions []string, memoryPolicy presets.MemoryPolicy) error {
 	var b strings.Builder
 	b.WriteString("# Question Bundle\n\n")
 	for _, question := range questions {
@@ -792,9 +1343,9 @@ func writeQuestionBundle(root string, run *Run, questions []string) error {
 	if err := writeArtifact(root, run, "question_bundle.md", b.String()); err != nil {
 		return err
 	}
-	return memory.Add(root, memory.Item{
+	return memory.AddAllowed(root, memory.Item{
 		ID:             "question-" + run.ID,
-		Scope:          "run",
+		Scope:          "runs/" + run.ID,
 		Kind:           "question",
 		Source:         "task pipeline",
 		Confidence:     "medium",
@@ -803,7 +1354,7 @@ func writeQuestionBundle(root string, run *Run, questions []string) error {
 		Status:         "active",
 		Tags:           []string{run.Mode, "question"},
 		Summary:        strings.Join(questions, " "),
-	})
+	}, memoryPolicy.AllowedScopes)
 }
 
 func heroSpec(title string, task string, pack contextpack.Pack) string {

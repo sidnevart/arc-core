@@ -103,6 +103,8 @@ func parseTaskOptions(name string, args []string) (orchestrator.TaskOptions, err
 	pathFlag := fs.String("path", ".", "project path")
 	modeFlag := fs.String("mode", "", "mode override")
 	providerFlag := fs.String("provider", "", "provider override")
+	budgetModeFlag := fs.String("budget-mode", "", "budget mode override")
+	budgetOverrideFlag := fs.String("budget-override-file", "", "session budget override JSON file")
 	modelFlag := fs.String("model", "", "model override")
 	dryRunFlag := fs.Bool("dry-run", false, "skip provider execution")
 	runChecksFlag := fs.Bool("run-checks", false, "execute detected verification checks")
@@ -139,6 +141,8 @@ func parseTaskOptions(name string, args []string) (orchestrator.TaskOptions, err
 		Task:            strings.Join(fs.Args(), " "),
 		Mode:            modeValue,
 		Provider:        providerValue,
+		BudgetMode:      *budgetModeFlag,
+		BudgetOverride:  *budgetOverrideFlag,
 		Model:           *modelFlag,
 		DryRun:          *dryRunFlag,
 		RunChecks:       *runChecksFlag,

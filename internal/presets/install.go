@@ -44,26 +44,35 @@ type FileOperation struct {
 }
 
 type InstallPreview struct {
-	Manifest     Manifest        `json:"manifest"`
-	Target       string          `json:"target"`
-	Operations   []FileOperation `json:"operations"`
-	HasConflicts bool            `json:"has_conflicts"`
-	Conflicts    []string        `json:"conflicts,omitempty"`
+	Manifest                Manifest              `json:"manifest"`
+	Target                  string                `json:"target"`
+	Operations              []FileOperation       `json:"operations"`
+	Resolution              EnvironmentResolution `json:"resolution"`
+	HasConflicts            bool                  `json:"has_conflicts"`
+	Conflicts               []string              `json:"conflicts,omitempty"`
+	HasFileConflicts        bool                  `json:"has_file_conflicts,omitempty"`
+	FileConflicts           []string              `json:"file_conflicts,omitempty"`
+	HasEnvironmentConflicts bool                  `json:"has_environment_conflicts,omitempty"`
+	EnvironmentConflicts    []string              `json:"environment_conflicts,omitempty"`
 }
 
 type InstalledRecord struct {
-	InstallID       string          `json:"install_id"`
-	PresetID        string          `json:"preset_id"`
-	Version         string          `json:"version"`
-	Target          string          `json:"target"`
-	InstalledAt     string          `json:"installed_at"`
-	Status          string          `json:"status"`
-	AllowOverwrite  bool            `json:"allow_overwrite"`
-	Operations      []FileOperation `json:"operations"`
-	ReportPath      string          `json:"report_path"`
-	BackupDir       string          `json:"backup_dir,omitempty"`
-	RolledBackAt    string          `json:"rolled_back_at,omitempty"`
-	RollbackSummary string          `json:"rollback_summary,omitempty"`
+	InstallID             string          `json:"install_id"`
+	PresetID              string          `json:"preset_id"`
+	Version               string          `json:"version"`
+	ManifestPath          string          `json:"manifest_path,omitempty"`
+	Manifest              Manifest        `json:"manifest,omitempty"`
+	Target                string          `json:"target"`
+	InstalledAt           string          `json:"installed_at"`
+	Status                string          `json:"status"`
+	AllowOverwrite        bool            `json:"allow_overwrite"`
+	Operations            []FileOperation `json:"operations"`
+	ReportPath            string          `json:"report_path"`
+	EnvironmentReportPath string          `json:"environment_report_path,omitempty"`
+	EnvironmentJSONPath   string          `json:"environment_json_path,omitempty"`
+	BackupDir             string          `json:"backup_dir,omitempty"`
+	RolledBackAt          string          `json:"rolled_back_at,omitempty"`
+	RollbackSummary       string          `json:"rollback_summary,omitempty"`
 }
 
 type InstallResult struct {
@@ -85,12 +94,24 @@ func PreviewInstall(opts PreviewOptions) (InstallPreview, error) {
 	if err != nil {
 		return InstallPreview{}, err
 	}
+	resolution, err := ResolveEnvironment(opts.WorkspaceRoot, opts.CatalogRoot, &manifest)
+	if err != nil {
+		return InstallPreview{}, err
+	}
+	environmentConflicts := append([]string{}, resolution.EnvironmentConflicts...)
+	allConflicts := append([]string{}, conflicts...)
+	allConflicts = append(allConflicts, environmentConflicts...)
 	return InstallPreview{
-		Manifest:     manifest,
-		Target:       opts.WorkspaceRoot,
-		Operations:   operations,
-		HasConflicts: len(conflicts) > 0,
-		Conflicts:    conflicts,
+		Manifest:                manifest,
+		Target:                  opts.WorkspaceRoot,
+		Operations:              operations,
+		Resolution:              resolution,
+		HasConflicts:            len(allConflicts) > 0,
+		Conflicts:               allConflicts,
+		HasFileConflicts:        len(conflicts) > 0,
+		FileConflicts:           conflicts,
+		HasEnvironmentConflicts: len(environmentConflicts) > 0,
+		EnvironmentConflicts:    environmentConflicts,
 	}, nil
 }
 
@@ -103,13 +124,18 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, err
 	}
-	if preview.HasConflicts && !opts.AllowOverwrite {
+	if preview.HasEnvironmentConflicts {
+		return InstallResult{}, fmt.Errorf("preset has environment conflicts; review preview before installing")
+	}
+	if preview.HasFileConflicts && !opts.AllowOverwrite {
 		return InstallResult{}, fmt.Errorf("preset has file collisions; rerun with overwrite approval")
 	}
 
 	installID := time.Now().UTC().Format("20060102T150405Z") + "-" + preview.Manifest.ID
 	backupDir := project.ProjectFile(opts.WorkspaceRoot, "presets", "backups", installID)
 	reportPath := project.ProjectFile(opts.WorkspaceRoot, "presets", "reports", installID+".md")
+	environmentReportPath := project.ProjectFile(opts.WorkspaceRoot, "presets", "reports", installID+".environment.md")
+	environmentJSONPath := project.ProjectFile(opts.WorkspaceRoot, "presets", "reports", installID+".environment.json")
 
 	applied := []FileOperation{}
 	for _, operation := range preview.Operations {
@@ -127,28 +153,45 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	}
 
 	record := InstalledRecord{
-		InstallID:      installID,
-		PresetID:       preview.Manifest.ID,
-		Version:        preview.Manifest.Version,
-		Target:         opts.WorkspaceRoot,
-		InstalledAt:    time.Now().UTC().Format(time.RFC3339),
-		Status:         "installed",
-		AllowOverwrite: opts.AllowOverwrite,
-		Operations:     applied,
-		ReportPath:     reportPath,
+		InstallID:             installID,
+		PresetID:              preview.Manifest.ID,
+		Version:               preview.Manifest.Version,
+		ManifestPath:          preview.Manifest.Path,
+		Manifest:              preview.Manifest,
+		Target:                opts.WorkspaceRoot,
+		InstalledAt:           time.Now().UTC().Format(time.RFC3339),
+		Status:                "installed",
+		AllowOverwrite:        opts.AllowOverwrite,
+		Operations:            applied,
+		ReportPath:            reportPath,
+		EnvironmentReportPath: environmentReportPath,
+		EnvironmentJSONPath:   environmentJSONPath,
 	}
 	if hasAnyCollision(applied) {
 		record.BackupDir = backupDir
 	}
 
+	if err := project.WriteJSON(environmentJSONPath, preview.Resolution); err != nil {
+		_ = rollbackApplied(opts.WorkspaceRoot, applied, backupDir)
+		return InstallResult{}, err
+	}
+	if err := project.WriteString(environmentReportPath, RenderEnvironmentResolutionMarkdown(preview.Resolution)); err != nil {
+		_ = rollbackApplied(opts.WorkspaceRoot, applied, backupDir)
+		_ = os.Remove(environmentJSONPath)
+		return InstallResult{}, err
+	}
 	report := renderInstallReport(preview, record)
 	if err := project.WriteString(reportPath, report); err != nil {
 		_ = rollbackApplied(opts.WorkspaceRoot, applied, backupDir)
+		_ = os.Remove(environmentJSONPath)
+		_ = os.Remove(environmentReportPath)
 		return InstallResult{}, err
 	}
 	if err := appendInstalledRecord(opts.WorkspaceRoot, record); err != nil {
 		_ = rollbackApplied(opts.WorkspaceRoot, applied, backupDir)
 		_ = os.Remove(reportPath)
+		_ = os.Remove(environmentJSONPath)
+		_ = os.Remove(environmentReportPath)
 		return InstallResult{}, err
 	}
 	return InstallResult{
@@ -221,6 +264,116 @@ func plannedOperations(workspaceRoot string, manifest Manifest) ([]FileOperation
 	sort.Slice(operations, func(i, j int) bool { return operations[i].TargetPath < operations[j].TargetPath })
 	sort.Strings(conflicts)
 	return operations, conflicts, nil
+}
+
+func compositionConflictsForManifest(manifest Manifest) []string {
+	conflicts := []string{}
+	if manifest.PresetType != "infrastructure" {
+		if len(manifest.RequiredModules) > 0 {
+			conflicts = append(conflicts, fmt.Sprintf("preset %s cannot declare required_modules unless preset_type=infrastructure", manifest.ID))
+		}
+		for _, scope := range manifest.MemoryScopes {
+			scope = strings.TrimSpace(scope)
+			if scope == "system" {
+				conflicts = append(conflicts, fmt.Sprintf("preset %s cannot claim system memory scope unless preset_type=infrastructure", manifest.ID))
+			}
+		}
+		switch strings.TrimSpace(manifest.Permissions.Runtime) {
+		case "sandboxed_exec", "risky_exec_requires_approval":
+			conflicts = append(conflicts, fmt.Sprintf("preset %s cannot request runtime permission %s unless preset_type=infrastructure", manifest.ID, manifest.Permissions.Runtime))
+		}
+	}
+	return conflicts
+}
+
+func pairwiseCompositionConflicts(installed Manifest, candidate Manifest) []string {
+	conflicts := []string{}
+	for _, cmd := range candidate.Commands {
+		if duplicateCommandName(installed, cmd.Name) {
+			conflicts = append(conflicts, fmt.Sprintf("command collision: %s already declares command %s", installed.ID, cmd.Name))
+		}
+	}
+	for _, hook := range candidate.Hooks {
+		if duplicateHook(installed, hook) {
+			conflicts = append(conflicts, fmt.Sprintf("hook collision: %s already declares %s/%s", installed.ID, hook.Lifecycle, hook.Name))
+		}
+	}
+	for _, scope := range candidate.MemoryScopes {
+		scope = strings.TrimSpace(scope)
+		if scope == "" || memoryScopeCanBeShared(scope) {
+			continue
+		}
+		if hasMemoryScope(installed, scope) {
+			conflicts = append(conflicts, fmt.Sprintf("memory scope collision: %s already claims %s", installed.ID, scope))
+		}
+	}
+	if installed.PresetType == "infrastructure" && candidate.PresetType != "infrastructure" {
+		if len(candidate.RequiredModules) > 0 {
+			conflicts = append(conflicts, fmt.Sprintf("preset %s cannot require infrastructure modules while %s is installed as infrastructure", candidate.ID, installed.ID))
+		}
+	}
+	return conflicts
+}
+
+func duplicateCommandName(manifest Manifest, name string) bool {
+	name = strings.TrimSpace(name)
+	for _, cmd := range manifest.Commands {
+		if strings.TrimSpace(cmd.Name) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func duplicateHook(manifest Manifest, hook Hook) bool {
+	name := strings.TrimSpace(hook.Name)
+	lifecycle := strings.TrimSpace(hook.Lifecycle)
+	for _, existing := range manifest.Hooks {
+		if strings.TrimSpace(existing.Name) == name && strings.TrimSpace(existing.Lifecycle) == lifecycle {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMemoryScope(manifest Manifest, scope string) bool {
+	scope = strings.TrimSpace(scope)
+	for _, existing := range manifest.MemoryScopes {
+		if strings.TrimSpace(existing) == scope {
+			return true
+		}
+	}
+	return false
+}
+
+func memoryScopeCanBeShared(scope string) bool {
+	switch strings.TrimSpace(scope) {
+	case "project", "session", "run_artifacts", "archive":
+		return true
+	default:
+		return false
+	}
+}
+
+func dedupeStrings(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, exists := seen[item]; exists {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func writeTargetFile(workspaceRoot string, operation FileOperation) error {
@@ -320,6 +473,18 @@ func renderInstallReport(preview InstallPreview, record InstalledRecord) string 
 			line += " (collision backed up)"
 		}
 		b.WriteString(line + "\n")
+	}
+	if len(preview.EnvironmentConflicts) > 0 {
+		b.WriteString("\n## Environment Conflicts\n\n")
+		for _, conflict := range preview.EnvironmentConflicts {
+			b.WriteString("- " + conflict + "\n")
+		}
+	}
+	if len(preview.Resolution.Layers) > 0 {
+		b.WriteString("\n## Environment Resolution\n\n")
+		b.WriteString("- effective_runtime_ceiling: " + preview.Resolution.EffectiveRuntimeCeiling + "\n")
+		b.WriteString("- effective_budget_profile: " + preview.Resolution.EffectiveBudgetProfile + "\n")
+		b.WriteString("- layers: " + fmt.Sprintf("%d", len(preview.Resolution.Layers)) + "\n")
 	}
 	if len(preview.Manifest.SafetyNotes) > 0 {
 		b.WriteString("\n## Safety Notes\n\n")

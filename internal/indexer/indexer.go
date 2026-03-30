@@ -189,7 +189,7 @@ func shouldSkipDir(rel string) bool {
 	parts := strings.Split(rel, string(filepath.Separator))
 	for _, part := range parts {
 		switch part {
-		case ".git", "node_modules", "vendor":
+		case ".git", "node_modules", "vendor", ".context":
 			return true
 		}
 	}

@@ -68,6 +68,7 @@ func DefaultScaffold(root string, provider string, enabledProviders []string, mo
 			".arc/specs",
 			".arc/runs",
 			".arc/evals",
+			".arc/budget",
 			".arc/index",
 			".arc/cache",
 		},
@@ -128,6 +129,17 @@ This project can host local ARC hooks here when the runtime and preset system ma
 			".arc/index/docs.json":           "{}\n",
 			".arc/index/tooling.json":        "{}\n",
 			".arc/presets/installed.json":    "[]\n",
+			".arc/budget/policy.json": `{
+  "mode": "balanced",
+  "prefer_local": true,
+  "block_premium_high_risk": false,
+  "require_approval_for_premium_high_risk": false,
+  "require_approval_for_premium_required": false,
+  "notes": [
+    "balanced mode classifies provider work and records usage without blocking ordinary execution"
+  ]
+}
+`,
 			".arc/evals/metrics.json": `{
   "study": {"runs": 0, "completed": 0, "blocked": 0, "failed": 0, "docs_reports": 0, "evidence_warnings": 0},
   "work": {"runs": 0, "completed": 0, "blocked": 0, "failed": 0, "docs_reports": 0, "evidence_warnings": 0},

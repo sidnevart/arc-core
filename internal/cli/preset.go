@@ -98,6 +98,24 @@ func runPresetPreview(args []string) error {
 	fmt.Printf("preset: %s\n", preview.Manifest.Name)
 	fmt.Printf("target: %s\n", preview.Target)
 	fmt.Printf("conflicts: %t\n", preview.HasConflicts)
+	fmt.Printf("effective runtime ceiling: %s\n", preview.Resolution.EffectiveRuntimeCeiling)
+	fmt.Printf("effective budget profile: %s\n", preview.Resolution.EffectiveBudgetProfile)
+	if len(preview.Resolution.Layers) > 0 {
+		fmt.Println("layers:")
+		for _, layer := range preview.Resolution.Layers {
+			label := fmt.Sprintf("%d. %s", layer.Order, layer.Kind)
+			if layer.PresetID != "" {
+				label += " (" + layer.PresetID + ")"
+			}
+			fmt.Printf("- %s: %s\n", label, layer.Name)
+		}
+	}
+	if preview.HasEnvironmentConflicts {
+		fmt.Println("environment conflicts:")
+		for _, conflict := range preview.EnvironmentConflicts {
+			fmt.Printf("- %s\n", conflict)
+		}
+	}
 	for _, op := range preview.Operations {
 		fmt.Printf("- %s %s\n", op.Action, op.TargetPath)
 	}
@@ -127,6 +145,12 @@ func runPresetInstall(args []string) error {
 	}
 	fmt.Printf("installed preset %s as %s\n", result.Record.PresetID, result.Record.InstallID)
 	fmt.Printf("report: %s\n", result.Report)
+	if result.Record.EnvironmentReportPath != "" {
+		fmt.Printf("environment report: %s\n", result.Record.EnvironmentReportPath)
+	}
+	if result.Record.EnvironmentJSONPath != "" {
+		fmt.Printf("environment json: %s\n", result.Record.EnvironmentJSONPath)
+	}
 	return nil
 }
 
