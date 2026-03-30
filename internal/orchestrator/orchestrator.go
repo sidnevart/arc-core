@@ -96,22 +96,24 @@ type VerifyOptions struct {
 }
 
 type ContextSelection struct {
-	SelectedSource        string           `json:"selected_source"`
-	SelectionReason       string           `json:"selection_reason"`
-	Selected              contextpack.Pack `json:"selected"`
-	ArcPack               contextpack.Pack `json:"arc_pack"`
-	CtxPack               contextpack.Pack `json:"ctx_pack"`
-	ArcTokens             int              `json:"arc_tokens"`
-	CtxTokens             int              `json:"ctx_tokens"`
-	TokenReduction        int              `json:"token_reduction"`
-	ArcQuality            int              `json:"arc_quality"`
-	CtxQuality            int              `json:"ctx_quality"`
-	CtxMemoryMatches      int              `json:"ctx_memory_matches"`
-	CtxMemoryBoost        int              `json:"ctx_memory_boost"`
-	CtxMemoryTrustBonus   int              `json:"ctx_memory_trust_bonus"`
-	CtxMemoryRecencyBonus int              `json:"ctx_memory_recency_bonus"`
-	CtxSourceDiversity    int              `json:"ctx_source_diversity"`
-	CtxDiversityBonus     int              `json:"ctx_diversity_bonus"`
+	SelectedSource         string           `json:"selected_source"`
+	SelectionReason        string           `json:"selection_reason"`
+	Selected               contextpack.Pack `json:"selected"`
+	ArcPack                contextpack.Pack `json:"arc_pack"`
+	CtxPack                contextpack.Pack `json:"ctx_pack"`
+	ArcTokens              int              `json:"arc_tokens"`
+	CtxTokens              int              `json:"ctx_tokens"`
+	TokenReduction         int              `json:"token_reduction"`
+	ArcQuality             int              `json:"arc_quality"`
+	CtxQuality             int              `json:"ctx_quality"`
+	CtxMemoryMatches       int              `json:"ctx_memory_matches"`
+	CtxMemoryBoost         int              `json:"ctx_memory_boost"`
+	CtxMemoryTrustBonus    int              `json:"ctx_memory_trust_bonus"`
+	CtxMemoryRecencyBonus  int              `json:"ctx_memory_recency_bonus"`
+	CtxSourceDiversity     int              `json:"ctx_source_diversity"`
+	CtxDiversityBonus      int              `json:"ctx_diversity_bonus"`
+	CtxDocFamilyDiversity  int              `json:"ctx_doc_family_diversity"`
+	CtxCodeFamilyDiversity int              `json:"ctx_code_family_diversity"`
 }
 
 func Plan(root string, opts TaskOptions) (Run, error) {
@@ -1053,23 +1055,28 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 		return err
 	}
 	if err := project.WriteJSON(filepath.Join(dir, "ctx_context_metadata.json"), map[string]any{
-		"output_dir":           ctxResult.OutputDir,
-		"built_index":          ctxResult.BuiltIndex,
-		"matched_terms":        ctxResult.MatchedTerms,
-		"quality_score":        ctxResult.QualityScore,
-		"term_coverage":        ctxResult.TermCoverage,
-		"matched_sections":     ctxResult.MatchedSections,
-		"memory_match_count":   ctxResult.MemoryMatchCount,
-		"matched_memory_ids":   ctxResult.MatchedMemoryIDs,
-		"memory_boost":         ctxResult.MemoryBoost,
-		"memory_trust_bonus":   ctxResult.MemoryTrustBonus,
-		"memory_recency_bonus": ctxResult.MemoryRecencyBonus,
-		"section_provenance":   ctxResult.SectionProvenance,
-		"accounting":           ctxResult.Accounting,
-		"reuse":                ctxResult.Reuse,
-		"pack_json":            ctxResult.PackJSONPath,
-		"pack_md":              ctxResult.PackMDPath,
-		"metadata":             ctxResult.MetadataPath,
+		"output_dir":            ctxResult.OutputDir,
+		"built_index":           ctxResult.BuiltIndex,
+		"matched_terms":         ctxResult.MatchedTerms,
+		"quality_score":         ctxResult.QualityScore,
+		"term_coverage":         ctxResult.TermCoverage,
+		"matched_sections":      ctxResult.MatchedSections,
+		"memory_match_count":    ctxResult.MemoryMatchCount,
+		"matched_memory_ids":    ctxResult.MatchedMemoryIDs,
+		"memory_boost":          ctxResult.MemoryBoost,
+		"memory_trust_bonus":    ctxResult.MemoryTrustBonus,
+		"memory_recency_bonus":  ctxResult.MemoryRecencyBonus,
+		"source_kinds":          ctxResult.SourceKinds,
+		"source_diversity":      ctxResult.SourceDiversity,
+		"diversity_bonus":       ctxResult.DiversityBonus,
+		"doc_family_diversity":  ctxResult.DocFamilyDiversity,
+		"code_family_diversity": ctxResult.CodeFamilyDiversity,
+		"section_provenance":    ctxResult.SectionProvenance,
+		"accounting":            ctxResult.Accounting,
+		"reuse":                 ctxResult.Reuse,
+		"pack_json":             ctxResult.PackJSONPath,
+		"pack_md":               ctxResult.PackMDPath,
+		"metadata":              ctxResult.MetadataPath,
 	}); err != nil {
 		return err
 	}
@@ -1096,6 +1103,8 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 	run.Metadata["context_ctx_memory_recency_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryRecencyBonus)
 	run.Metadata["context_ctx_source_diversity"] = fmt.Sprintf("%d", selection.CtxSourceDiversity)
 	run.Metadata["context_ctx_diversity_bonus"] = fmt.Sprintf("%d", selection.CtxDiversityBonus)
+	run.Metadata["context_ctx_doc_family_diversity"] = fmt.Sprintf("%d", selection.CtxDocFamilyDiversity)
+	run.Metadata["context_ctx_code_family_diversity"] = fmt.Sprintf("%d", selection.CtxCodeFamilyDiversity)
 	run.Metadata["context_ctx_candidate_total"] = fmt.Sprintf("%d", ctxResult.Accounting.CandidateTotal)
 	run.Metadata["context_ctx_selected_total"] = fmt.Sprintf("%d", ctxResult.Accounting.SelectedTotal)
 	run.Metadata["context_ctx_index_source"] = ctxResult.Reuse.IndexSource
@@ -1138,22 +1147,24 @@ func chooseContextPack(arcPack contextpack.Pack, ctxResult contexttool.AssembleR
 		reason = "arc_kept_for_size_or_quality"
 	}
 	return ContextSelection{
-		SelectedSource:        source,
-		SelectionReason:       reason,
-		Selected:              selected,
-		ArcPack:               arcPack,
-		CtxPack:               ctxPack,
-		ArcTokens:             arcPack.ApproxTokens,
-		CtxTokens:             ctxPack.ApproxTokens,
-		TokenReduction:        arcPack.ApproxTokens - ctxPack.ApproxTokens,
-		ArcQuality:            arcQuality,
-		CtxQuality:            ctxQuality,
-		CtxMemoryMatches:      ctxResult.MemoryMatchCount,
-		CtxMemoryBoost:        ctxResult.MemoryBoost,
-		CtxMemoryTrustBonus:   ctxResult.MemoryTrustBonus,
-		CtxMemoryRecencyBonus: ctxResult.MemoryRecencyBonus,
-		CtxSourceDiversity:    ctxResult.SourceDiversity,
-		CtxDiversityBonus:     ctxResult.DiversityBonus,
+		SelectedSource:         source,
+		SelectionReason:        reason,
+		Selected:               selected,
+		ArcPack:                arcPack,
+		CtxPack:                ctxPack,
+		ArcTokens:              arcPack.ApproxTokens,
+		CtxTokens:              ctxPack.ApproxTokens,
+		TokenReduction:         arcPack.ApproxTokens - ctxPack.ApproxTokens,
+		ArcQuality:             arcQuality,
+		CtxQuality:             ctxQuality,
+		CtxMemoryMatches:       ctxResult.MemoryMatchCount,
+		CtxMemoryBoost:         ctxResult.MemoryBoost,
+		CtxMemoryTrustBonus:    ctxResult.MemoryTrustBonus,
+		CtxMemoryRecencyBonus:  ctxResult.MemoryRecencyBonus,
+		CtxSourceDiversity:     ctxResult.SourceDiversity,
+		CtxDiversityBonus:      ctxResult.DiversityBonus,
+		CtxDocFamilyDiversity:  ctxResult.DocFamilyDiversity,
+		CtxCodeFamilyDiversity: ctxResult.CodeFamilyDiversity,
 	}
 }
 

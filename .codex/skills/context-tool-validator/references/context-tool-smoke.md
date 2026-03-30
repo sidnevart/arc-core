@@ -12,8 +12,11 @@
 - `assemble` metadata records `section_provenance` and aggregate `accounting`.
 - `assemble` metadata records reuse evidence via `reuse.index_source`, `reuse.memory_source`, and `reuse.reused_artifact_count`.
 - `assemble` metadata records diversity evidence via `source_kinds`, `source_diversity`, and `diversity_bonus`.
+- `assemble` metadata records family-level diversity evidence via `doc_family_diversity` and `code_family_diversity`.
 - `bench` writes baseline, optimized, and summary artifacts, and the summary includes candidate-vs-final totals plus reuse-source fields for both strategies.
 - `bench` summary also includes diversity fields such as `baseline_source_diversity`, `optimized_source_diversity`, and `optimized_diversity_bonus`.
+- `bench` summary also includes `optimized_doc_family_diversity` and `optimized_code_family_diversity`.
 - ARC run path can still mirror selected `ctx` artifacts into `.arc/runs/...`.
 - ARC run metadata mirrors top-level `ctx` reuse fields such as `context_ctx_index_source` and `context_ctx_reused_artifact_count`.
 - ARC run metadata mirrors top-level diversity fields such as `context_ctx_source_diversity` and `context_ctx_diversity_bonus`.
+- ARC run metadata mirrors family-level diversity fields such as `context_ctx_doc_family_diversity` and `context_ctx_code_family_diversity`.

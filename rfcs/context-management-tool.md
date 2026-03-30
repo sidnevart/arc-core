@@ -181,6 +181,12 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
   - `ctx bench` summaries now compare `baseline_source_diversity` vs `optimized_source_diversity`
   - ARC run metadata now mirrors `context_ctx_source_diversity` and `context_ctx_diversity_bonus`
   - selection can now also prefer a slightly larger `ctx` pack when it stays within an extended token window and proves stronger cross-surface coverage instead of relying only on smaller token size, raw quality score, or memory matches
+- a later path-family slice on 2026-03-30 tightened the ranking inside the docs/code sections too:
+  - `Relevant Docs` and `Relevant Code Surfaces` now diversify selected entries across path families before falling back to raw score order
+  - `ctx assemble` metadata now persists `doc_family_diversity` and `code_family_diversity`
+  - `ctx bench` summaries now persist `optimized_doc_family_diversity` and `optimized_code_family_diversity`
+  - ARC run metadata now mirrors `context_ctx_doc_family_diversity` and `context_ctx_code_family_diversity`
+  - this keeps the optimized pack from looking diverse only at the section level while still collapsing onto one dominant subtree inside `docs` or `code`
 
 ## Verification
 
@@ -198,3 +204,4 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
 - a later smoke on 2026-03-30 confirmed the first managed-config slice too: `ctx init --path .` ensured `.context-tool.yaml` exists, `ctx doctor --path . --json` reported `config_path` plus the resolved human config, `ctx index build --path .` respected the config-driven include/exclude/docs filters, and both `ctx assemble --json ...` and `ctx bench --json ...` persisted `config_path` + `human_config` in their result metadata.
 - a later smoke on 2026-03-30 confirmed the first reuse-evidence slice too: `.context/artifacts/assemble/20260330T203305Z/metadata.json` recorded `reuse.index_source=reused_existing`, `reuse.memory_source=reused_existing`, and `reuse.reused_artifact_count=2`; `.context/benchmarks/20260330T203302Z/summary.json` mirrored the same reuse summary fields; and `.arc/runs/20260330T203303Z-771727000/run.json` surfaced `context_ctx_index_source=reused_existing` plus `context_ctx_reused_artifact_count=2` without needing to open the full standalone artifact.
 - a later smoke on 2026-03-30 confirmed the first diversity slice too: `.context/artifacts/assemble/20260330T205625Z/metadata.json` recorded `source_kinds=["task","docs","code","memory","index"]`, `source_diversity=5`, and `diversity_bonus=90`; `.context/benchmarks/20260330T205625Z/summary.json` mirrored `baseline_source_diversity=5` vs `optimized_source_diversity=5` plus `optimized_diversity_bonus=90`; and `.arc/runs/20260330T205626Z-351423000/run.json` surfaced `context_ctx_source_diversity=5` with `context_ctx_diversity_bonus=90`.
+- a later smoke on 2026-03-30 confirmed the first path-family slice too: `.context/artifacts/assemble/20260330T210657Z/metadata.json` recorded `doc_family_diversity=7` and `code_family_diversity=9`; `.context/benchmarks/20260330T210657Z/summary.json` mirrored `optimized_doc_family_diversity=6` plus `optimized_code_family_diversity=10`; and `.arc/runs/20260330T210736Z-708381000/{ctx_context_metadata.json,run.json}` now both expose the same family-diversity signals inside ARC run artifacts.

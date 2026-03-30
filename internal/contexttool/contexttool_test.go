@@ -558,6 +558,42 @@ func TestRenderRelevantCodePrefersMatchingSymbolName(t *testing.T) {
 	}
 }
 
+func TestRenderRelevantDocsSpreadsAcrossFamilies(t *testing.T) {
+	idx := indexer.Result{
+		Docs: []indexer.DocEntry{
+			{Path: "apps/docs/docs/context-tool.md", Title: "Context Tool", Headings: []string{"Context selection"}},
+			{Path: "apps/docs/docs/provider-budgeting.md", Title: "Budget", Headings: []string{"Context selection"}},
+			{Path: "rfcs/context-management-tool.md", Title: "Standalone Context Management Tool", Headings: []string{"Context selection"}},
+			{Path: "memory_bank/active_context.md", Title: "Active Context", Headings: []string{"Context selection"}},
+		},
+	}
+	rendered := renderRelevantDocs(idx, []string{"context", "selection"})
+	families := map[string]bool{}
+	for _, path := range rendered.SourcePaths {
+		families[pathFamily(path)] = true
+	}
+	if len(families) < 2 {
+		t.Fatalf("expected docs selection to span at least two families, got %v", rendered.SourcePaths)
+	}
+}
+
+func TestRenderRelevantCodePrefersCodeKindsOverDocs(t *testing.T) {
+	idx := indexer.Result{
+		Files: []indexer.FileEntry{
+			{Path: "apps/docs/docs/context-tool.md", Kind: "doc"},
+			{Path: "internal/contexttool/assemble.go", Kind: "go"},
+			{Path: "internal/orchestrator/orchestrator.go", Kind: "go"},
+		},
+		Symbols: []indexer.SymbolEntry{
+			{Name: "ChooseContextPack", Kind: "function", Path: "internal/orchestrator/orchestrator.go", Line: 10},
+		},
+	}
+	rendered := renderRelevantCode(idx, []string{"context", "tool"})
+	if !strings.Contains(rendered.Content, "internal/contexttool/assemble.go") {
+		t.Fatalf("expected code file to outrank docs in code surfaces: %s", rendered.Content)
+	}
+}
+
 func TestSummarizePackRewardsSourceDiversity(t *testing.T) {
 	pack := contextpack.Pack{
 		Task: "explain context selection",

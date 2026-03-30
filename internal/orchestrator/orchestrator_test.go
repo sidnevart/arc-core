@@ -115,6 +115,12 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 	if got := run.Metadata["context_ctx_diversity_bonus"]; got == "" {
 		t.Fatal("expected context_ctx_diversity_bonus metadata to be populated")
 	}
+	if got := run.Metadata["context_ctx_doc_family_diversity"]; got == "" {
+		t.Fatal("expected context_ctx_doc_family_diversity metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_code_family_diversity"]; got == "" {
+		t.Fatal("expected context_ctx_code_family_diversity metadata to be populated")
+	}
 
 	var ctxMeta map[string]any
 	if err := project.ReadJSON(run.Artifacts["ctx_context_metadata.json"], &ctxMeta); err != nil {
@@ -723,6 +729,9 @@ func TestChooseContextPackPrefersCtxForDiverseSourcesWithinExtendedWindow(t *tes
 	}
 	if selection.CtxSourceDiversity != 3 {
 		t.Fatalf("CtxSourceDiversity = %d, want 3", selection.CtxSourceDiversity)
+	}
+	if selection.CtxDocFamilyDiversity != 0 || selection.CtxCodeFamilyDiversity != 0 {
+		t.Fatalf("unexpected family diversity mirrors in synthetic selection: %#v", selection)
 	}
 }
 

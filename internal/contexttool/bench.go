@@ -30,32 +30,34 @@ type BenchResult struct {
 }
 
 type BenchSummary struct {
-	Task                        string   `json:"task"`
-	GeneratedAt                 string   `json:"generated_at"`
-	MatchedTerms                []string `json:"matched_terms"`
-	BaselineApproxTokens        int      `json:"baseline_approx_tokens"`
-	OptimizedApproxTokens       int      `json:"optimized_approx_tokens"`
-	BaselineQualityScore        int      `json:"baseline_quality_score"`
-	OptimizedQualityScore       int      `json:"optimized_quality_score"`
-	TokenReduction              int      `json:"token_reduction"`
-	TokenReductionPercent       int      `json:"token_reduction_percent"`
-	BaselineSectionCount        int      `json:"baseline_section_count"`
-	OptimizedSectionCount       int      `json:"optimized_section_count"`
-	BaselineMemoryMatches       int      `json:"baseline_memory_matches"`
-	OptimizedMemoryMatches      int      `json:"optimized_memory_matches"`
-	OptimizedMemoryTrustBonus   int      `json:"optimized_memory_trust_bonus"`
-	OptimizedMemoryRecencyBonus int      `json:"optimized_memory_recency_bonus"`
-	BaselineSourceDiversity     int      `json:"baseline_source_diversity"`
-	OptimizedSourceDiversity    int      `json:"optimized_source_diversity"`
-	OptimizedDiversityBonus     int      `json:"optimized_diversity_bonus"`
-	BaselineCandidateTotal      int      `json:"baseline_candidate_total"`
-	BaselineSelectedTotal       int      `json:"baseline_selected_total"`
-	OptimizedCandidateTotal     int      `json:"optimized_candidate_total"`
-	OptimizedSelectedTotal      int      `json:"optimized_selected_total"`
-	ReuseIndexSource            string   `json:"reuse_index_source"`
-	ReuseMemorySource           string   `json:"reuse_memory_source"`
-	ReuseArtifactCount          int      `json:"reuse_artifact_count"`
-	Recommendation              string   `json:"recommendation"`
+	Task                         string   `json:"task"`
+	GeneratedAt                  string   `json:"generated_at"`
+	MatchedTerms                 []string `json:"matched_terms"`
+	BaselineApproxTokens         int      `json:"baseline_approx_tokens"`
+	OptimizedApproxTokens        int      `json:"optimized_approx_tokens"`
+	BaselineQualityScore         int      `json:"baseline_quality_score"`
+	OptimizedQualityScore        int      `json:"optimized_quality_score"`
+	TokenReduction               int      `json:"token_reduction"`
+	TokenReductionPercent        int      `json:"token_reduction_percent"`
+	BaselineSectionCount         int      `json:"baseline_section_count"`
+	OptimizedSectionCount        int      `json:"optimized_section_count"`
+	BaselineMemoryMatches        int      `json:"baseline_memory_matches"`
+	OptimizedMemoryMatches       int      `json:"optimized_memory_matches"`
+	OptimizedMemoryTrustBonus    int      `json:"optimized_memory_trust_bonus"`
+	OptimizedMemoryRecencyBonus  int      `json:"optimized_memory_recency_bonus"`
+	BaselineSourceDiversity      int      `json:"baseline_source_diversity"`
+	OptimizedSourceDiversity     int      `json:"optimized_source_diversity"`
+	OptimizedDiversityBonus      int      `json:"optimized_diversity_bonus"`
+	OptimizedDocFamilyDiversity  int      `json:"optimized_doc_family_diversity"`
+	OptimizedCodeFamilyDiversity int      `json:"optimized_code_family_diversity"`
+	BaselineCandidateTotal       int      `json:"baseline_candidate_total"`
+	BaselineSelectedTotal        int      `json:"baseline_selected_total"`
+	OptimizedCandidateTotal      int      `json:"optimized_candidate_total"`
+	OptimizedSelectedTotal       int      `json:"optimized_selected_total"`
+	ReuseIndexSource             string   `json:"reuse_index_source"`
+	ReuseMemorySource            string   `json:"reuse_memory_source"`
+	ReuseArtifactCount           int      `json:"reuse_artifact_count"`
+	Recommendation               string   `json:"recommendation"`
 }
 
 func Bench(root string, task string) (BenchResult, error) {
@@ -98,32 +100,34 @@ func Bench(root string, task string) (BenchResult, error) {
 		reductionPercent = reduction * 100 / baseline.ApproxTokens
 	}
 	summary := BenchSummary{
-		Task:                        task,
-		GeneratedAt:                 time.Now().UTC().Format(time.RFC3339),
-		MatchedTerms:                terms,
-		BaselineApproxTokens:        baseline.ApproxTokens,
-		OptimizedApproxTokens:       optimized.ApproxTokens,
-		BaselineQualityScore:        baselineSummary.QualityScore,
-		OptimizedQualityScore:       optimizedSummary.QualityScore,
-		TokenReduction:              reduction,
-		TokenReductionPercent:       reductionPercent,
-		BaselineSectionCount:        len(baseline.Sections),
-		OptimizedSectionCount:       len(optimized.Sections),
-		BaselineMemoryMatches:       baselineSummary.MemoryMatchCount,
-		OptimizedMemoryMatches:      optimizedSummary.MemoryMatchCount,
-		OptimizedMemoryTrustBonus:   optimizedSummary.MemoryTrustBonus,
-		OptimizedMemoryRecencyBonus: optimizedSummary.MemoryRecencyBonus,
-		BaselineSourceDiversity:     baselineSummary.SourceDiversity,
-		OptimizedSourceDiversity:    optimizedSummary.SourceDiversity,
-		OptimizedDiversityBonus:     optimizedSummary.DiversityBonus,
-		BaselineCandidateTotal:      baselineSummary.Accounting.CandidateTotal,
-		BaselineSelectedTotal:       baselineSummary.Accounting.SelectedTotal,
-		OptimizedCandidateTotal:     optimizedSummary.Accounting.CandidateTotal,
-		OptimizedSelectedTotal:      optimizedSummary.Accounting.SelectedTotal,
-		ReuseIndexSource:            reuse.IndexSource,
-		ReuseMemorySource:           reuse.MemorySource,
-		ReuseArtifactCount:          reuse.ReusedArtifactCount,
-		Recommendation:              benchRecommendation(reduction, reductionPercent),
+		Task:                         task,
+		GeneratedAt:                  time.Now().UTC().Format(time.RFC3339),
+		MatchedTerms:                 terms,
+		BaselineApproxTokens:         baseline.ApproxTokens,
+		OptimizedApproxTokens:        optimized.ApproxTokens,
+		BaselineQualityScore:         baselineSummary.QualityScore,
+		OptimizedQualityScore:        optimizedSummary.QualityScore,
+		TokenReduction:               reduction,
+		TokenReductionPercent:        reductionPercent,
+		BaselineSectionCount:         len(baseline.Sections),
+		OptimizedSectionCount:        len(optimized.Sections),
+		BaselineMemoryMatches:        baselineSummary.MemoryMatchCount,
+		OptimizedMemoryMatches:       optimizedSummary.MemoryMatchCount,
+		OptimizedMemoryTrustBonus:    optimizedSummary.MemoryTrustBonus,
+		OptimizedMemoryRecencyBonus:  optimizedSummary.MemoryRecencyBonus,
+		BaselineSourceDiversity:      baselineSummary.SourceDiversity,
+		OptimizedSourceDiversity:     optimizedSummary.SourceDiversity,
+		OptimizedDiversityBonus:      optimizedSummary.DiversityBonus,
+		OptimizedDocFamilyDiversity:  optimizedSummary.DocFamilyDiversity,
+		OptimizedCodeFamilyDiversity: optimizedSummary.CodeFamilyDiversity,
+		BaselineCandidateTotal:       baselineSummary.Accounting.CandidateTotal,
+		BaselineSelectedTotal:        baselineSummary.Accounting.SelectedTotal,
+		OptimizedCandidateTotal:      optimizedSummary.Accounting.CandidateTotal,
+		OptimizedSelectedTotal:       optimizedSummary.Accounting.SelectedTotal,
+		ReuseIndexSource:             reuse.IndexSource,
+		ReuseMemorySource:            reuse.MemorySource,
+		ReuseArtifactCount:           reuse.ReusedArtifactCount,
+		Recommendation:               benchRecommendation(reduction, reductionPercent),
 	}
 	if err := project.WriteJSON(summaryPath, summary); err != nil {
 		return BenchResult{}, err
