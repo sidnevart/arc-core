@@ -732,6 +732,39 @@ func TestChooseContextPackPrefersCtxForMemoryMatchesWithinExtendedWindow(t *test
 	}
 }
 
+func TestChooseContextPackPrefersCtxForEfficientRetrievalWithinExtendedWindow(t *testing.T) {
+	arcPack := contextpack.Pack{
+		Task:         "explain context selection",
+		ApproxTokens: 1000,
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Mode Policy", Content: "generic work mode"},
+		},
+	}
+	ctxPack := contextpack.Pack{
+		Task:         "explain context selection",
+		ApproxTokens: 1180,
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Relevant Docs", Content: "focused docs"},
+			{Title: "Relevant Code Surfaces", Content: "focused code"},
+		},
+	}
+	selection := chooseContextPack(arcPack, contexttool.AssembleResult{
+		Pack:                  ctxPack,
+		QualityScore:          320,
+		RetrievalEfficiency:   25,
+		NoiseReductionPercent: 80,
+		EfficiencyBonus:       45,
+	})
+	if selection.SelectedSource != "ctx" {
+		t.Fatalf("SelectedSource = %q, want ctx", selection.SelectedSource)
+	}
+	if selection.SelectionReason != "ctx_efficient_retrieval_within_extended_token_window" {
+		t.Fatalf("SelectionReason = %q, want ctx_efficient_retrieval_within_extended_token_window", selection.SelectionReason)
+	}
+}
+
 func TestChooseContextPackPrefersCtxForDiverseSourcesWithinExtendedWindow(t *testing.T) {
 	arcPack := contextpack.Pack{
 		Task:         "explain context selection",

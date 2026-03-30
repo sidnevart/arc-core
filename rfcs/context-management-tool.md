@@ -213,6 +213,22 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
     - `context_ctx_index_fingerprint`
     - `context_ctx_memory_fingerprint`
   - this keeps reuse evidence inspectable at the exact artifact-content level instead of stopping at `reused_existing` vs `rebuilt`
+- a later retrieval-efficiency slice on 2026-03-31 tightened selection quality one step further:
+  - `ctx assemble` metadata now persists:
+    - `retrieval_efficiency`
+    - `noise_reduction_percent`
+    - `efficiency_bonus`
+  - `ctx bench` summaries now compare:
+    - `baseline_retrieval_efficiency`
+    - `optimized_retrieval_efficiency`
+    - `baseline_noise_reduction_percent`
+    - `optimized_noise_reduction_percent`
+    - `optimized_efficiency_bonus`
+  - ARC run metadata now mirrors:
+    - `context_ctx_retrieval_efficiency`
+    - `context_ctx_noise_reduction_percent`
+    - `context_ctx_efficiency_bonus`
+  - selection can now justify a `ctx` pack as `ctx_efficient_retrieval_within_extended_token_window` when it proves it filtered candidate noise aggressively enough without giving up quality
 
 ## Verification
 

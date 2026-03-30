@@ -47,6 +47,11 @@ type BenchSummary struct {
 	OptimizedMemoryMatches            int      `json:"optimized_memory_matches"`
 	OptimizedMemoryTrustBonus         int      `json:"optimized_memory_trust_bonus"`
 	OptimizedMemoryRecencyBonus       int      `json:"optimized_memory_recency_bonus"`
+	BaselineRetrievalEfficiency       int      `json:"baseline_retrieval_efficiency"`
+	OptimizedRetrievalEfficiency      int      `json:"optimized_retrieval_efficiency"`
+	BaselineNoiseReductionPercent     int      `json:"baseline_noise_reduction_percent"`
+	OptimizedNoiseReductionPercent    int      `json:"optimized_noise_reduction_percent"`
+	OptimizedEfficiencyBonus          int      `json:"optimized_efficiency_bonus"`
 	BaselineSourceDiversity           int      `json:"baseline_source_diversity"`
 	OptimizedSourceDiversity          int      `json:"optimized_source_diversity"`
 	OptimizedDiversityBonus           int      `json:"optimized_diversity_bonus"`
@@ -123,6 +128,11 @@ func Bench(root string, task string) (BenchResult, error) {
 		OptimizedMemoryMatches:            optimizedSummary.MemoryMatchCount,
 		OptimizedMemoryTrustBonus:         optimizedSummary.MemoryTrustBonus,
 		OptimizedMemoryRecencyBonus:       optimizedSummary.MemoryRecencyBonus,
+		BaselineRetrievalEfficiency:       baselineSummary.RetrievalEfficiency,
+		OptimizedRetrievalEfficiency:      optimizedSummary.RetrievalEfficiency,
+		BaselineNoiseReductionPercent:     baselineSummary.NoiseReductionPercent,
+		OptimizedNoiseReductionPercent:    optimizedSummary.NoiseReductionPercent,
+		OptimizedEfficiencyBonus:          optimizedSummary.EfficiencyBonus,
 		BaselineSourceDiversity:           baselineSummary.SourceDiversity,
 		OptimizedSourceDiversity:          optimizedSummary.SourceDiversity,
 		OptimizedDiversityBonus:           optimizedSummary.DiversityBonus,

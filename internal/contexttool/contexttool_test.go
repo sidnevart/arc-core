@@ -661,6 +661,34 @@ func TestSummarizePackRewardsSourceDiversity(t *testing.T) {
 	}
 }
 
+func TestSummarizePackTracksRetrievalEfficiencyAndNoiseReduction(t *testing.T) {
+	pack := contextpack.Pack{
+		Task: "explain context selection",
+		Sections: []contextpack.Section{
+			{Title: "Task Brief", Content: "explain context selection"},
+			{Title: "Relevant Docs", Content: "context selection docs"},
+			{Title: "Relevant Code Surfaces", Content: "context selection code"},
+		},
+	}
+	summary := summarizePack(pack, []string{"context", "selection"}, nil, []SectionProvenance{
+		{Title: "Task Brief", SelectedCount: 1},
+		{Title: "Relevant Docs", SelectedCount: 2},
+		{Title: "Relevant Code Surfaces", SelectedCount: 2},
+	}, RetrievalAccounting{
+		CandidateTotal: 40,
+		SelectedTotal:  5,
+	})
+	if summary.RetrievalEfficiency <= 0 {
+		t.Fatalf("expected positive retrieval efficiency, got %d", summary.RetrievalEfficiency)
+	}
+	if summary.NoiseReductionPercent < 80 {
+		t.Fatalf("expected strong noise reduction, got %d", summary.NoiseReductionPercent)
+	}
+	if summary.EfficiencyBonus <= 0 {
+		t.Fatalf("expected positive efficiency bonus, got %d", summary.EfficiencyBonus)
+	}
+}
+
 func TestSummarizePackTracksClusterDiversityAndDominance(t *testing.T) {
 	pack := contextpack.Pack{
 		Task: "explain context selection",

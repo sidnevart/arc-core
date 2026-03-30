@@ -32,6 +32,9 @@ type AssembleResult struct {
 	MemoryBoost              int                 `json:"memory_boost"`
 	MemoryTrustBonus         int                 `json:"memory_trust_bonus"`
 	MemoryRecencyBonus       int                 `json:"memory_recency_bonus"`
+	RetrievalEfficiency      int                 `json:"retrieval_efficiency"`
+	NoiseReductionPercent    int                 `json:"noise_reduction_percent"`
+	EfficiencyBonus          int                 `json:"efficiency_bonus"`
 	SourceKinds              []string            `json:"source_kinds,omitempty"`
 	SourceDiversity          int                 `json:"source_diversity"`
 	DiversityBonus           int                 `json:"diversity_bonus"`
@@ -101,6 +104,9 @@ type assembleMetadata struct {
 	MemoryBoost              int                 `json:"memory_boost"`
 	MemoryTrustBonus         int                 `json:"memory_trust_bonus"`
 	MemoryRecencyBonus       int                 `json:"memory_recency_bonus"`
+	RetrievalEfficiency      int                 `json:"retrieval_efficiency"`
+	NoiseReductionPercent    int                 `json:"noise_reduction_percent"`
+	EfficiencyBonus          int                 `json:"efficiency_bonus"`
 	SourceKinds              []string            `json:"source_kinds,omitempty"`
 	SourceDiversity          int                 `json:"source_diversity"`
 	DiversityBonus           int                 `json:"diversity_bonus"`
@@ -126,6 +132,9 @@ type retrievalSummary struct {
 	MemoryBoost              int
 	MemoryTrustBonus         int
 	MemoryRecencyBonus       int
+	RetrievalEfficiency      int
+	NoiseReductionPercent    int
+	EfficiencyBonus          int
 	SourceKinds              []string
 	SourceDiversity          int
 	DiversityBonus           int
@@ -217,6 +226,9 @@ func Assemble(root string, task string) (AssembleResult, error) {
 		MemoryBoost:              summary.MemoryBoost,
 		MemoryTrustBonus:         summary.MemoryTrustBonus,
 		MemoryRecencyBonus:       summary.MemoryRecencyBonus,
+		RetrievalEfficiency:      summary.RetrievalEfficiency,
+		NoiseReductionPercent:    summary.NoiseReductionPercent,
+		EfficiencyBonus:          summary.EfficiencyBonus,
 		SourceKinds:              summary.SourceKinds,
 		SourceDiversity:          summary.SourceDiversity,
 		DiversityBonus:           summary.DiversityBonus,
@@ -252,6 +264,9 @@ func Assemble(root string, task string) (AssembleResult, error) {
 		MemoryBoost:              summary.MemoryBoost,
 		MemoryTrustBonus:         summary.MemoryTrustBonus,
 		MemoryRecencyBonus:       summary.MemoryRecencyBonus,
+		RetrievalEfficiency:      summary.RetrievalEfficiency,
+		NoiseReductionPercent:    summary.NoiseReductionPercent,
+		EfficiencyBonus:          summary.EfficiencyBonus,
 		SourceKinds:              summary.SourceKinds,
 		SourceDiversity:          summary.SourceDiversity,
 		DiversityBonus:           summary.DiversityBonus,
@@ -713,15 +728,19 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 	codeClusterDiversity := sectionClusterDiversity(provenance, "Relevant Code Surfaces")
 	docDominantClusterShare := sectionDominantClusterShare(provenance, "Relevant Docs")
 	codeDominantClusterShare := sectionDominantClusterShare(provenance, "Relevant Code Surfaces")
+	efficiency, noiseReduction, efficiencyBonus := retrievalEfficiencySignals(accounting, 0)
 	if len(terms) == 0 {
 		memBoost, trustBonus, recencyBonus := memoryBonuses(memoryMatches)
 		return retrievalSummary{
-			QualityScore:             len(pack.Sections)*10 + memBoost + diversityBonus,
+			QualityScore:             len(pack.Sections)*10 + memBoost + diversityBonus + efficiencyBonus,
 			MemoryMatchCount:         len(memoryMatches),
 			MatchedMemoryIDs:         matchedMemoryIDs(memoryMatches),
 			MemoryBoost:              memBoost,
 			MemoryTrustBonus:         trustBonus,
 			MemoryRecencyBonus:       recencyBonus,
+			RetrievalEfficiency:      efficiency,
+			NoiseReductionPercent:    noiseReduction,
+			EfficiencyBonus:          efficiencyBonus,
 			SourceKinds:              sourceKinds,
 			SourceDiversity:          len(sourceKinds),
 			DiversityBonus:           diversityBonus,
@@ -775,8 +794,9 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 	}
 	memBoost, trustBonus, recencyBonus := memoryBonuses(memoryMatches)
 	clusterPenalty := dominancePenalty(docDominantClusterShare) + dominancePenalty(codeDominantClusterShare)
+	efficiency, noiseReduction, efficiencyBonus = retrievalEfficiencySignals(accounting, covered)
 	return retrievalSummary{
-		QualityScore:             covered*100 + len(matchedSections)*12 + bonus + memBoost + diversityBonus - clusterPenalty,
+		QualityScore:             covered*100 + len(matchedSections)*12 + bonus + memBoost + diversityBonus + efficiencyBonus - clusterPenalty,
 		TermCoverage:             covered,
 		MatchedSections:          matchedSections,
 		MemoryMatchCount:         len(memoryMatches),
@@ -784,6 +804,9 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 		MemoryBoost:              memBoost,
 		MemoryTrustBonus:         trustBonus,
 		MemoryRecencyBonus:       recencyBonus,
+		RetrievalEfficiency:      efficiency,
+		NoiseReductionPercent:    noiseReduction,
+		EfficiencyBonus:          efficiencyBonus,
 		SourceKinds:              sourceKinds,
 		SourceDiversity:          len(sourceKinds),
 		DiversityBonus:           diversityBonus,
@@ -796,6 +819,27 @@ func summarizePack(pack contextpack.Pack, terms []string, memoryMatches []memory
 		SectionProvenance:        provenance,
 		Accounting:               accounting,
 	}
+}
+
+func retrievalEfficiencySignals(accounting RetrievalAccounting, termCoverage int) (int, int, int) {
+	candidateTotal := accounting.CandidateTotal
+	selectedTotal := accounting.SelectedTotal
+	if selectedTotal <= 0 {
+		return 0, 0, 0
+	}
+	efficiency := 0
+	if termCoverage > 0 {
+		efficiency = (termCoverage * 100) / selectedTotal
+		if efficiency > 100 {
+			efficiency = 100
+		}
+	}
+	noiseReduction := 0
+	if candidateTotal > 0 && candidateTotal >= selectedTotal {
+		noiseReduction = ((candidateTotal - selectedTotal) * 100) / candidateTotal
+	}
+	bonus := min(80, efficiency+noiseReduction/3)
+	return efficiency, noiseReduction, bonus
 }
 
 func selectDocCandidates(candidates []docCandidate, limit int) []docCandidate {

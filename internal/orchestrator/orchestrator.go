@@ -110,6 +110,9 @@ type ContextSelection struct {
 	CtxMemoryBoost              int              `json:"ctx_memory_boost"`
 	CtxMemoryTrustBonus         int              `json:"ctx_memory_trust_bonus"`
 	CtxMemoryRecencyBonus       int              `json:"ctx_memory_recency_bonus"`
+	CtxRetrievalEfficiency      int              `json:"ctx_retrieval_efficiency"`
+	CtxNoiseReductionPercent    int              `json:"ctx_noise_reduction_percent"`
+	CtxEfficiencyBonus          int              `json:"ctx_efficiency_bonus"`
 	CtxSourceDiversity          int              `json:"ctx_source_diversity"`
 	CtxDiversityBonus           int              `json:"ctx_diversity_bonus"`
 	CtxDocFamilyDiversity       int              `json:"ctx_doc_family_diversity"`
@@ -1114,6 +1117,9 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 		"memory_boost":                ctxResult.MemoryBoost,
 		"memory_trust_bonus":          ctxResult.MemoryTrustBonus,
 		"memory_recency_bonus":        ctxResult.MemoryRecencyBonus,
+		"retrieval_efficiency":        ctxResult.RetrievalEfficiency,
+		"noise_reduction_percent":     ctxResult.NoiseReductionPercent,
+		"efficiency_bonus":            ctxResult.EfficiencyBonus,
 		"source_kinds":                ctxResult.SourceKinds,
 		"source_diversity":            ctxResult.SourceDiversity,
 		"diversity_bonus":             ctxResult.DiversityBonus,
@@ -1153,6 +1159,9 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 	run.Metadata["context_ctx_memory_boost"] = fmt.Sprintf("%d", selection.CtxMemoryBoost)
 	run.Metadata["context_ctx_memory_trust_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryTrustBonus)
 	run.Metadata["context_ctx_memory_recency_bonus"] = fmt.Sprintf("%d", selection.CtxMemoryRecencyBonus)
+	run.Metadata["context_ctx_retrieval_efficiency"] = fmt.Sprintf("%d", selection.CtxRetrievalEfficiency)
+	run.Metadata["context_ctx_noise_reduction_percent"] = fmt.Sprintf("%d", selection.CtxNoiseReductionPercent)
+	run.Metadata["context_ctx_efficiency_bonus"] = fmt.Sprintf("%d", selection.CtxEfficiencyBonus)
 	run.Metadata["context_ctx_source_diversity"] = fmt.Sprintf("%d", selection.CtxSourceDiversity)
 	run.Metadata["context_ctx_diversity_bonus"] = fmt.Sprintf("%d", selection.CtxDiversityBonus)
 	run.Metadata["context_ctx_doc_family_diversity"] = fmt.Sprintf("%d", selection.CtxDocFamilyDiversity)
@@ -1198,6 +1207,14 @@ func chooseContextPack(arcPack contextpack.Pack, ctxResult contexttool.AssembleR
 		source = "ctx"
 		reason = "ctx_memory_match_within_extended_token_window"
 	} else if ctxPack.ApproxTokens > 0 &&
+		ctxResult.RetrievalEfficiency >= 20 &&
+		ctxResult.NoiseReductionPercent >= 60 &&
+		withinPercent(ctxPack.ApproxTokens, arcPack.ApproxTokens, 20) &&
+		ctxQuality+ctxResult.EfficiencyBonus >= arcQuality {
+		selected = ctxPack
+		source = "ctx"
+		reason = "ctx_efficient_retrieval_within_extended_token_window"
+	} else if ctxPack.ApproxTokens > 0 &&
 		ctxResult.DocClusterDiversity >= 2 &&
 		ctxResult.CodeClusterDiversity >= 2 &&
 		ctxResult.DocDominantClusterShare <= 50 &&
@@ -1229,6 +1246,9 @@ func chooseContextPack(arcPack contextpack.Pack, ctxResult contexttool.AssembleR
 		CtxMemoryBoost:              ctxResult.MemoryBoost,
 		CtxMemoryTrustBonus:         ctxResult.MemoryTrustBonus,
 		CtxMemoryRecencyBonus:       ctxResult.MemoryRecencyBonus,
+		CtxRetrievalEfficiency:      ctxResult.RetrievalEfficiency,
+		CtxNoiseReductionPercent:    ctxResult.NoiseReductionPercent,
+		CtxEfficiencyBonus:          ctxResult.EfficiencyBonus,
 		CtxSourceDiversity:          ctxResult.SourceDiversity,
 		CtxDiversityBonus:           ctxResult.DiversityBonus,
 		CtxDocFamilyDiversity:       ctxResult.DocFamilyDiversity,
