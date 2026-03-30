@@ -18,6 +18,7 @@ ARC already has provider adapters, timeouts, and guarded execution, but it does 
 - `arc task plan|run` now accept `--budget-mode`
 - `task run` now records `budget_assessment.json` in the run dir and appends `.arc/budget/usage_events.jsonl`
 - `task run` can now reroute local-first work into a local-only path before provider execution, and records that decision in both run metadata and usage events
+- `task run` now also records `prompt_minimization.json`, embedding the same evidence into `budget_assessment.json` and `budget_usage_event.json`
 
 ## Goals
 
@@ -147,6 +148,23 @@ Presets may declare a `budget_profile`, but they do not get to self-authorize ex
 - status: first low-limit slice implemented. Assessments and usage events now persist `low_limit_state`, `confidence`, and `matched_signals`; `emergency_low_limit` blocks `premium_required` in addition to `premium_high_risk`; and low-confidence `cheap_provider_ok` requests can now reroute locally to conserve provider budget.
 - the same slice now also persists `confidence_tier` and `signal_breakdown`, so follow-up routing and operator review can see not only the final class but also the relative local/premium/high-risk score shape that produced it.
 - the current routing layer now also persists `routing_trigger`, and `ultra_safe` (`low_limit_state=constrained`) joins `emergency_low_limit` in rerouting weak low-confidence `cheap_provider_ok` work locally instead of spending provider budget on generic prompts.
+- the next explainability slice on 2026-03-30 also made budget attribution prompt-aware:
+  - each run now persists `prompt_minimization.json`
+  - `budget_assessment.json` embeds the same `prompt_minimization` payload
+  - `budget_usage_event.json` and the global usage ledger now persist:
+    - `project_root`
+    - `budget_mode_source`
+    - `environment_budget_profile`
+    - `context_source`
+    - `context_selection_reason`
+    - `context_arc_tokens`
+    - `context_ctx_tokens`
+    - `context_selected_tokens`
+    - `context_token_reduction`
+    - `context_token_reduction_percent`
+    - `prompt_minimized`
+    - `route_locally`
+  - this closes the gap between “provider work was allowed” and “ARC actually minimized the prompt before allowing it”
 
 ## Verification
 
@@ -157,3 +175,7 @@ Presets may declare a `budget_profile`, but they do not get to self-authorize ex
 - a later smoke also confirmed the mode-precedence fix: on a repository that previously carried a stale `ultra_safe` policy file, rerunning the same command with `--budget-mode balanced` rewrote `.arc/budget/policy.json` back to `balanced` and kept `assessment.mode` and `policy.mode` aligned in `budget_assessment.json`.
 - another smoke confirmed the heuristic refinement: `arc task run --budget-mode balanced "inspect and implement the budget schema"` now produces `classification=premium_required` with `route_locally=false`, proving weak local signals no longer dominate provider-bound work.
 - the current low-limit smoke now also confirms `emergency_low_limit` behavior: `implement the budget schema` is blocked as `premium_required`, while a weak generic prompt such as `brainstorm three friendly names for the budget modes` stays `cheap_provider_ok`, records `low_limit_state=emergency`, and reroutes locally with `provider_execution_mode=local_routed`.
+- a later smoke on 2026-03-30 confirmed the prompt-minimization slice too:
+  - `.arc/runs/20260330T214448Z-476991000/prompt_minimization.json` recorded `context_source=ctx`, `token_reduction=3327`, and `token_reduction_percent=82` for `inspect context tool budget schema`
+  - `.arc/runs/20260330T214448Z-476991000/budget_usage_event.json` mirrored the same context-token and minimization fields together with `project_root` and `route_locally=true`
+  - `.arc/runs/20260330T214448Z-612250000/budget_assessment.json` embedded the same prompt-minimization structure for a `premium_required` case, proving the artifact is not limited to local-routed runs

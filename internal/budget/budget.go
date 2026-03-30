@@ -94,24 +94,50 @@ type Assessment struct {
 }
 
 type UsageEvent struct {
-	Timestamp       string         `json:"timestamp"`
-	RunID           string         `json:"run_id"`
-	Task            string         `json:"task"`
-	Provider        string         `json:"provider"`
-	BudgetMode      Mode           `json:"budget_mode"`
-	LowLimitState   LowLimitState  `json:"low_limit_state"`
-	Classification  Classification `json:"classification"`
-	Confidence      int            `json:"confidence"`
-	ConfidenceTier  string         `json:"confidence_tier,omitempty"`
-	Status          string         `json:"status"`
-	UsedProvider    bool           `json:"used_provider"`
-	DryRun          bool           `json:"dry_run"`
-	ExitCode        int            `json:"exit_code,omitempty"`
-	Reasoning       []string       `json:"reasoning,omitempty"`
-	MatchedSignals  []string       `json:"matched_signals,omitempty"`
-	SignalBreakdown map[string]int `json:"signal_breakdown,omitempty"`
-	RoutingTrigger  string         `json:"routing_trigger,omitempty"`
-	Notes           []string       `json:"notes,omitempty"`
+	Timestamp                    string         `json:"timestamp"`
+	RunID                        string         `json:"run_id"`
+	ProjectRoot                  string         `json:"project_root,omitempty"`
+	Task                         string         `json:"task"`
+	Provider                     string         `json:"provider"`
+	BudgetMode                   Mode           `json:"budget_mode"`
+	BudgetModeSource             string         `json:"budget_mode_source,omitempty"`
+	EnvironmentBudgetProfile     string         `json:"environment_budget_profile,omitempty"`
+	LowLimitState                LowLimitState  `json:"low_limit_state"`
+	Classification               Classification `json:"classification"`
+	Confidence                   int            `json:"confidence"`
+	ConfidenceTier               string         `json:"confidence_tier,omitempty"`
+	Status                       string         `json:"status"`
+	UsedProvider                 bool           `json:"used_provider"`
+	RouteLocally                 bool           `json:"route_locally,omitempty"`
+	DryRun                       bool           `json:"dry_run"`
+	ExitCode                     int            `json:"exit_code,omitempty"`
+	ContextSource                string         `json:"context_source,omitempty"`
+	ContextSelectionReason       string         `json:"context_selection_reason,omitempty"`
+	ContextArcTokens             int            `json:"context_arc_tokens,omitempty"`
+	ContextCtxTokens             int            `json:"context_ctx_tokens,omitempty"`
+	ContextSelectedTokens        int            `json:"context_selected_tokens,omitempty"`
+	ContextTokenReduction        int            `json:"context_token_reduction,omitempty"`
+	ContextTokenReductionPercent int            `json:"context_token_reduction_percent,omitempty"`
+	PromptMinimized              bool           `json:"prompt_minimized,omitempty"`
+	Reasoning                    []string       `json:"reasoning,omitempty"`
+	MatchedSignals               []string       `json:"matched_signals,omitempty"`
+	SignalBreakdown              map[string]int `json:"signal_breakdown,omitempty"`
+	RoutingTrigger               string         `json:"routing_trigger,omitempty"`
+	Notes                        []string       `json:"notes,omitempty"`
+}
+
+type UsageContext struct {
+	ProjectRoot                  string
+	BudgetModeSource             string
+	EnvironmentBudgetProfile     string
+	ContextSource                string
+	ContextSelectionReason       string
+	ContextArcTokens             int
+	ContextCtxTokens             int
+	ContextSelectedTokens        int
+	ContextTokenReduction        int
+	ContextTokenReductionPercent int
+	PromptMinimized              bool
 }
 
 type Request struct {
@@ -577,25 +603,37 @@ func AppendUsageEvent(root string, event UsageEvent) error {
 	return nil
 }
 
-func NewUsageEvent(runID string, req Request, assessment Assessment, runStatus string, providerUsed bool, result *provider.TaskResult, notes ...string) UsageEvent {
+func NewUsageEvent(runID string, req Request, assessment Assessment, usageCtx UsageContext, runStatus string, providerUsed bool, result *provider.TaskResult, notes ...string) UsageEvent {
 	event := UsageEvent{
-		Timestamp:       time.Now().UTC().Format(time.RFC3339),
-		RunID:           runID,
-		Task:            req.Task,
-		Provider:        req.Provider,
-		BudgetMode:      assessment.Mode,
-		LowLimitState:   assessment.LowLimitState,
-		Classification:  assessment.Classification,
-		Confidence:      assessment.Confidence,
-		ConfidenceTier:  assessment.ConfidenceTier,
-		Status:          runStatus,
-		UsedProvider:    providerUsed,
-		DryRun:          req.DryRun,
-		Reasoning:       append([]string{}, assessment.Reasoning...),
-		MatchedSignals:  append([]string{}, assessment.MatchedSignals...),
-		SignalBreakdown: cloneBreakdown(assessment.SignalBreakdown),
-		RoutingTrigger:  assessment.RoutingTrigger,
-		Notes:           append([]string{}, notes...),
+		Timestamp:                    time.Now().UTC().Format(time.RFC3339),
+		RunID:                        runID,
+		ProjectRoot:                  usageCtx.ProjectRoot,
+		Task:                         req.Task,
+		Provider:                     req.Provider,
+		BudgetMode:                   assessment.Mode,
+		BudgetModeSource:             usageCtx.BudgetModeSource,
+		EnvironmentBudgetProfile:     usageCtx.EnvironmentBudgetProfile,
+		LowLimitState:                assessment.LowLimitState,
+		Classification:               assessment.Classification,
+		Confidence:                   assessment.Confidence,
+		ConfidenceTier:               assessment.ConfidenceTier,
+		Status:                       runStatus,
+		UsedProvider:                 providerUsed,
+		RouteLocally:                 assessment.RouteLocally,
+		DryRun:                       req.DryRun,
+		ContextSource:                usageCtx.ContextSource,
+		ContextSelectionReason:       usageCtx.ContextSelectionReason,
+		ContextArcTokens:             usageCtx.ContextArcTokens,
+		ContextCtxTokens:             usageCtx.ContextCtxTokens,
+		ContextSelectedTokens:        usageCtx.ContextSelectedTokens,
+		ContextTokenReduction:        usageCtx.ContextTokenReduction,
+		ContextTokenReductionPercent: usageCtx.ContextTokenReductionPercent,
+		PromptMinimized:              usageCtx.PromptMinimized,
+		Reasoning:                    append([]string{}, assessment.Reasoning...),
+		MatchedSignals:               append([]string{}, assessment.MatchedSignals...),
+		SignalBreakdown:              cloneBreakdown(assessment.SignalBreakdown),
+		RoutingTrigger:               assessment.RoutingTrigger,
+		Notes:                        append([]string{}, notes...),
 	}
 	if result != nil {
 		event.ExitCode = result.ExitCode

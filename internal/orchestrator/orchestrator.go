@@ -193,6 +193,8 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 	var budgetAssessment *budget.Assessment
 	var effectiveBudgetMode budget.Mode
 	var providerUsed bool
+	var contextSelection ContextSelection
+	var environmentBudgetProfile string
 	effectiveUseProvider := opts.UseProvider
 	budgetNotes := []string{}
 	budgetModeSource := "default"
@@ -209,7 +211,19 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 			UseProvider: effectiveUseProvider,
 			DryRun:      opts.DryRun,
 			BudgetMode:  string(effectiveBudgetMode),
-		}, *budgetAssessment, run.Status, providerUsed, run.ProviderResult, budgetNotes...)
+		}, *budgetAssessment, budget.UsageContext{
+			ProjectRoot:                  root,
+			BudgetModeSource:             budgetModeSource,
+			EnvironmentBudgetProfile:     environmentBudgetProfile,
+			ContextSource:                contextSelection.SelectedSource,
+			ContextSelectionReason:       contextSelection.SelectionReason,
+			ContextArcTokens:             contextSelection.ArcTokens,
+			ContextCtxTokens:             contextSelection.CtxTokens,
+			ContextSelectedTokens:        contextSelection.Selected.ApproxTokens,
+			ContextTokenReduction:        contextSelection.TokenReduction,
+			ContextTokenReductionPercent: reductionPercent(contextSelection.ArcTokens, contextSelection.TokenReduction),
+			PromptMinimized:              contextSelection.SelectedSource == "ctx" && contextSelection.TokenReduction > 0,
+		}, run.Status, providerUsed, run.ProviderResult, budgetNotes...)
 		_ = budget.AppendUsageEvent(root, event)
 		eventPath := filepath.Join(runDir(root, run.ID), "budget_usage_event.json")
 		_ = project.WriteJSON(eventPath, event)
@@ -249,6 +263,7 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 	if err := writeContextArtifacts(root, &run, idx, items, pack, ctxResult, selection); err != nil {
 		return Run{}, err
 	}
+	contextSelection = selection
 	if err := runHookLifecycle(root, &run, resolution, memoryPolicy, "after_context_assembly", opts); err != nil {
 		return Run{}, err
 	}
@@ -282,11 +297,22 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 		return Run{}, err
 	}
 	effectiveBudgetMode = policyResolution.EffectiveMode
+	environmentBudgetProfile = resolution.EffectiveBudgetProfile
 	budgetModeSource = policyResolution.EffectiveModeSource
 	reqBudget.BudgetMode = string(effectiveBudgetMode)
 	policy := policyResolution.EffectivePolicy
 	assessedBudget := budget.AssessWithPolicy(reqBudget, policy)
 	budgetAssessment = &assessedBudget
+	promptMinimization := map[string]any{
+		"context_source":           selection.SelectedSource,
+		"context_selection_reason": selection.SelectionReason,
+		"arc_tokens":               selection.ArcTokens,
+		"ctx_tokens":               selection.CtxTokens,
+		"selected_tokens":          selection.Selected.ApproxTokens,
+		"token_reduction":          selection.TokenReduction,
+		"token_reduction_percent":  reductionPercent(selection.ArcTokens, selection.TokenReduction),
+		"prompt_minimized":         selection.SelectedSource == "ctx" && selection.TokenReduction > 0,
+	}
 	budgetPath := filepath.Join(runDir(root, run.ID), "budget_assessment.json")
 	if err := project.WriteJSON(budgetPath, map[string]any{
 		"policy":                     policy,
@@ -304,11 +330,18 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 		"applied_override_sources":   policyResolution.AppliedOverrideSources,
 		"project_override_path":      policyResolution.ProjectOverridePath,
 		"session_override_path":      policyResolution.SessionOverridePath,
+		"prompt_minimization":        promptMinimization,
 	}); err != nil {
 		_ = failRun(root, &run, err)
 		return Run{}, err
 	}
 	run.Artifacts["budget_assessment.json"] = budgetPath
+	promptMinimizationPath := filepath.Join(runDir(root, run.ID), "prompt_minimization.json")
+	if err := project.WriteJSON(promptMinimizationPath, promptMinimization); err != nil {
+		_ = failRun(root, &run, err)
+		return Run{}, err
+	}
+	run.Artifacts["prompt_minimization.json"] = promptMinimizationPath
 	policyResolutionPath := filepath.Join(runDir(root, run.ID), "budget_policy_resolution.json")
 	if err := project.WriteJSON(policyResolutionPath, policyResolution); err != nil {
 		_ = failRun(root, &run, err)
@@ -323,6 +356,9 @@ func RunTask(root string, opts TaskOptions) (Run, error) {
 	run.Metadata["budget_session_override_present"] = fmt.Sprintf("%t", policyResolution.SessionOverridePresent)
 	run.Metadata["budget_override_sources"] = strings.Join(policyResolution.AppliedOverrideSources, ",")
 	run.Metadata["budget_low_limit_state"] = string(assessedBudget.LowLimitState)
+	run.Metadata["budget_prompt_minimized"] = fmt.Sprintf("%t", promptMinimization["prompt_minimized"])
+	run.Metadata["budget_prompt_token_reduction"] = fmt.Sprintf("%d", selection.TokenReduction)
+	run.Metadata["budget_prompt_token_reduction_percent"] = fmt.Sprintf("%d", reductionPercent(selection.ArcTokens, selection.TokenReduction))
 	run.Metadata["budget_classification"] = string(assessedBudget.Classification)
 	run.Metadata["budget_confidence"] = fmt.Sprintf("%d", assessedBudget.Confidence)
 	run.Metadata["budget_confidence_tier"] = assessedBudget.ConfidenceTier
@@ -1194,6 +1230,13 @@ func chooseContextPack(arcPack contextpack.Pack, ctxResult contexttool.AssembleR
 		CtxDocDominantClusterShare:  ctxResult.DocDominantClusterShare,
 		CtxCodeDominantClusterShare: ctxResult.CodeDominantClusterShare,
 	}
+}
+
+func reductionPercent(base int, reduction int) int {
+	if base <= 0 {
+		return 0
+	}
+	return reduction * 100 / base
 }
 
 func estimatePackQuality(pack contextpack.Pack) int {

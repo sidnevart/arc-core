@@ -361,3 +361,44 @@ func TestAppendUsageEventWritesJSONL(t *testing.T) {
 		t.Fatalf("expected usage event to be written, got:\n%s", string(data))
 	}
 }
+
+func TestNewUsageEventCarriesPromptMinimizationAttribution(t *testing.T) {
+	event := NewUsageEvent("run-ctx", Request{
+		Task:        "inspect context tool budget schema",
+		Provider:    "codex",
+		UseProvider: true,
+		DryRun:      false,
+		BudgetMode:  "balanced",
+	}, Assessment{
+		Mode:           ModeBalanced,
+		LowLimitState:  LowLimitNormal,
+		Classification: ClassLocalFirst,
+		Confidence:     75,
+		ConfidenceTier: "high",
+		RouteLocally:   true,
+	}, UsageContext{
+		ProjectRoot:                  "/tmp/demo",
+		BudgetModeSource:             "requested",
+		EnvironmentBudgetProfile:     "balanced",
+		ContextSource:                "ctx",
+		ContextSelectionReason:       "ctx_smaller_or_equal_and_quality_not_worse",
+		ContextArcTokens:             2000,
+		ContextCtxTokens:             700,
+		ContextSelectedTokens:        700,
+		ContextTokenReduction:        1300,
+		ContextTokenReductionPercent: 65,
+		PromptMinimized:              true,
+	}, "done", false, nil)
+	if event.ProjectRoot != "/tmp/demo" {
+		t.Fatalf("project root = %q, want /tmp/demo", event.ProjectRoot)
+	}
+	if !event.PromptMinimized {
+		t.Fatalf("expected prompt minimized flag")
+	}
+	if event.ContextTokenReductionPercent != 65 {
+		t.Fatalf("token reduction percent = %d, want 65", event.ContextTokenReductionPercent)
+	}
+	if event.ContextSource != "ctx" {
+		t.Fatalf("context source = %q, want ctx", event.ContextSource)
+	}
+}

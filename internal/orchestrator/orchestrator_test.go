@@ -70,6 +70,7 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 		"context_selection.json",
 		"budget_assessment.json",
 		"budget_usage_event.json",
+		"prompt_minimization.json",
 		"active_roles.md",
 		"active_skills.md",
 		"ticket_spec.md",
@@ -138,6 +139,15 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 	}
 	if got := run.Metadata["context_ctx_code_dominant_cluster_share"]; got == "" {
 		t.Fatal("expected context_ctx_code_dominant_cluster_share metadata to be populated")
+	}
+	if got := run.Metadata["budget_prompt_minimized"]; got == "" {
+		t.Fatal("expected budget_prompt_minimized metadata to be populated")
+	}
+	if got := run.Metadata["budget_prompt_token_reduction"]; got == "" {
+		t.Fatal("expected budget_prompt_token_reduction metadata to be populated")
+	}
+	if got := run.Metadata["budget_prompt_token_reduction_percent"]; got == "" {
+		t.Fatal("expected budget_prompt_token_reduction_percent metadata to be populated")
 	}
 
 	var ctxMeta map[string]any
