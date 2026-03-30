@@ -1120,6 +1120,8 @@ func writeContextArtifacts(root string, run *Run, idx indexer.Result, items []me
 	run.Metadata["context_ctx_candidate_total"] = fmt.Sprintf("%d", ctxResult.Accounting.CandidateTotal)
 	run.Metadata["context_ctx_selected_total"] = fmt.Sprintf("%d", ctxResult.Accounting.SelectedTotal)
 	run.Metadata["context_ctx_index_source"] = ctxResult.Reuse.IndexSource
+	run.Metadata["context_ctx_index_fingerprint"] = ctxResult.Reuse.IndexFingerprint
+	run.Metadata["context_ctx_memory_fingerprint"] = ctxResult.Reuse.MemoryFingerprint
 	run.Metadata["context_ctx_reused_artifact_count"] = fmt.Sprintf("%d", ctxResult.Reuse.ReusedArtifactCount)
 	run.Metadata["context_selection_reason"] = selection.SelectionReason
 	return saveRun(root, run)

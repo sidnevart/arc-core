@@ -76,9 +76,11 @@ type RetrievalAccounting struct {
 type ReuseSummary struct {
 	IndexBundlePath     string `json:"index_bundle_path"`
 	IndexSource         string `json:"index_source"`
+	IndexFingerprint    string `json:"index_fingerprint,omitempty"`
 	IndexReused         bool   `json:"index_reused"`
 	MemoryEntriesPath   string `json:"memory_entries_path"`
 	MemorySource        string `json:"memory_source"`
+	MemoryFingerprint   string `json:"memory_fingerprint,omitempty"`
 	MemoryEntriesCount  int    `json:"memory_entries_count"`
 	ReusedArtifactCount int    `json:"reused_artifact_count"`
 }

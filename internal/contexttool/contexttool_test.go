@@ -222,6 +222,12 @@ func TestAssembleWritesArtifacts(t *testing.T) {
 	if meta.Reuse.IndexSource == "" || meta.Reuse.MemorySource == "" {
 		t.Fatalf("expected reuse summary in metadata: %#v", meta.Reuse)
 	}
+	if meta.Reuse.IndexFingerprint == "" {
+		t.Fatalf("expected index fingerprint in reuse summary: %#v", meta.Reuse)
+	}
+	if meta.Reuse.MemoryFingerprint == "" {
+		t.Fatalf("expected memory fingerprint in reuse summary: %#v", meta.Reuse)
+	}
 	if meta.SourceDiversity <= 0 || meta.DiversityBonus <= 0 {
 		t.Fatalf("expected positive diversity metadata: diversity=%d bonus=%d", meta.SourceDiversity, meta.DiversityBonus)
 	}
@@ -280,6 +286,12 @@ func TestBenchWritesComparisonArtifacts(t *testing.T) {
 	}
 	if result.Reuse.IndexSource == "" || result.Summary.ReuseIndexSource == "" {
 		t.Fatalf("expected reuse evidence in bench result: %#v / %#v", result.Reuse, result.Summary)
+	}
+	if result.Reuse.IndexFingerprint == "" || result.Summary.ReuseIndexFingerprint == "" {
+		t.Fatalf("expected index fingerprint evidence in bench result: %#v / %#v", result.Reuse, result.Summary)
+	}
+	if result.Reuse.MemoryFingerprint == "" || result.Summary.ReuseMemoryFingerprint == "" {
+		t.Fatalf("expected memory fingerprint evidence in bench result: %#v / %#v", result.Reuse, result.Summary)
 	}
 }
 

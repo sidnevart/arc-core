@@ -202,6 +202,17 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
     - `context_ctx_doc_dominant_cluster_share`
     - `context_ctx_code_dominant_cluster_share`
   - selection can now also justify a `ctx` pack as cluster-balanced within a token window instead of only smaller, more memory-matched, or more source-diverse
+- a later fingerprint-aware reuse slice on 2026-03-30 tightened the reuse contract too:
+  - `ctx assemble` metadata now persists:
+    - `reuse.index_fingerprint`
+    - `reuse.memory_fingerprint`
+  - `ctx bench` summaries now persist:
+    - `reuse_index_fingerprint`
+    - `reuse_memory_fingerprint`
+  - ARC run metadata now mirrors:
+    - `context_ctx_index_fingerprint`
+    - `context_ctx_memory_fingerprint`
+  - this keeps reuse evidence inspectable at the exact artifact-content level instead of stopping at `reused_existing` vs `rebuilt`
 
 ## Verification
 
@@ -221,3 +232,4 @@ ARC should gradually move from directly calling ad hoc context helpers to callin
 - a later smoke on 2026-03-30 confirmed the first diversity slice too: `.context/artifacts/assemble/20260330T205625Z/metadata.json` recorded `source_kinds=["task","docs","code","memory","index"]`, `source_diversity=5`, and `diversity_bonus=90`; `.context/benchmarks/20260330T205625Z/summary.json` mirrored `baseline_source_diversity=5` vs `optimized_source_diversity=5` plus `optimized_diversity_bonus=90`; and `.arc/runs/20260330T205626Z-351423000/run.json` surfaced `context_ctx_source_diversity=5` with `context_ctx_diversity_bonus=90`.
 - a later smoke on 2026-03-30 confirmed the first path-family slice too: `.context/artifacts/assemble/20260330T210657Z/metadata.json` recorded `doc_family_diversity=7` and `code_family_diversity=9`; `.context/benchmarks/20260330T210657Z/summary.json` mirrored `optimized_doc_family_diversity=6` plus `optimized_code_family_diversity=10`; and `.arc/runs/20260330T210736Z-708381000/{ctx_context_metadata.json,run.json}` now both expose the same family-diversity signals inside ARC run artifacts.
 - a later smoke on 2026-03-30 confirmed the first subtree-dominance slice too: `.context/artifacts/assemble/20260330T212216Z/metadata.json` recorded `doc_cluster_diversity=1`, `code_cluster_diversity=16`, `doc_dominant_cluster_share=100`, and `code_dominant_cluster_share=15`; `.context/benchmarks/20260330T212216Z/summary.json` mirrored `optimized_doc_cluster_diversity=8`, `optimized_code_cluster_diversity=14`, `optimized_doc_dominant_cluster_share=12`, and `optimized_code_dominant_cluster_share=15`; and `.arc/runs/20260330T212216Z-840223000/run.json` surfaced the same `context_ctx_*cluster*` fields in top-level ARC metadata.
+- a later smoke on 2026-03-30 confirmed the fingerprint-aware reuse slice too: `.context/artifacts/assemble/20260330T213442Z/metadata.json` recorded `reuse.index_fingerprint=845709c21cea59ea` and `reuse.memory_fingerprint=326719a14a8d5e25`; `.context/benchmarks/20260330T213442Z/summary.json` mirrored `reuse_index_fingerprint=845709c21cea59ea` and `reuse_memory_fingerprint=326719a14a8d5e25`; and `.arc/runs/20260330T213442Z-943177000/run.json` surfaced `context_ctx_index_fingerprint=a4c1c8c7bf98e653` and `context_ctx_memory_fingerprint=326719a14a8d5e25` in top-level ARC metadata.

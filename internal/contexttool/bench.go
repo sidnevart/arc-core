@@ -1,6 +1,8 @@
 package contexttool
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,7 +61,9 @@ type BenchSummary struct {
 	OptimizedCandidateTotal           int      `json:"optimized_candidate_total"`
 	OptimizedSelectedTotal            int      `json:"optimized_selected_total"`
 	ReuseIndexSource                  string   `json:"reuse_index_source"`
+	ReuseIndexFingerprint             string   `json:"reuse_index_fingerprint,omitempty"`
 	ReuseMemorySource                 string   `json:"reuse_memory_source"`
+	ReuseMemoryFingerprint            string   `json:"reuse_memory_fingerprint,omitempty"`
 	ReuseArtifactCount                int      `json:"reuse_artifact_count"`
 	Recommendation                    string   `json:"recommendation"`
 }
@@ -133,7 +137,9 @@ func Bench(root string, task string) (BenchResult, error) {
 		OptimizedCandidateTotal:           optimizedSummary.Accounting.CandidateTotal,
 		OptimizedSelectedTotal:            optimizedSummary.Accounting.SelectedTotal,
 		ReuseIndexSource:                  reuse.IndexSource,
+		ReuseIndexFingerprint:             reuse.IndexFingerprint,
 		ReuseMemorySource:                 reuse.MemorySource,
+		ReuseMemoryFingerprint:            reuse.MemoryFingerprint,
 		ReuseArtifactCount:                reuse.ReusedArtifactCount,
 		Recommendation:                    benchRecommendation(reduction, reductionPercent),
 	}
@@ -183,6 +189,9 @@ func ensureIndexAndMemory(root string) (indexer.Result, []memory.Item, bool, Reu
 		reuse.IndexReused = true
 		reuse.ReusedArtifactCount++
 	}
+	if reuse.IndexBundlePath != "" {
+		reuse.IndexFingerprint = fingerprintFile(reuse.IndexBundlePath)
+	}
 	items, err := loadMemory(root)
 	if err != nil {
 		return indexer.Result{}, nil, false, ReuseSummary{}, err
@@ -194,7 +203,19 @@ func ensureIndexAndMemory(root string) (indexer.Result, []memory.Item, bool, Reu
 	} else {
 		reuse.MemorySource = "empty_workspace"
 	}
+	if reuse.MemoryEntriesPath != "" {
+		reuse.MemoryFingerprint = fingerprintFile(reuse.MemoryEntriesPath)
+	}
 	return idx, items, builtIndex, reuse, nil
+}
+
+func fingerprintFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:8])
 }
 
 func buildBaselinePack(task string, idx indexer.Result, items []memory.Item, terms []string) (contextpack.Pack, retrievalSummary) {

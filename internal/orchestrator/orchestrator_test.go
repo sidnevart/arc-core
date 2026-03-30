@@ -106,6 +106,12 @@ func TestRunTaskDryRunProducesArtifacts(t *testing.T) {
 	if got := run.Metadata["context_ctx_index_source"]; got == "" {
 		t.Fatal("expected context_ctx_index_source metadata to be populated")
 	}
+	if got := run.Metadata["context_ctx_index_fingerprint"]; got == "" {
+		t.Fatal("expected context_ctx_index_fingerprint metadata to be populated")
+	}
+	if got := run.Metadata["context_ctx_memory_fingerprint"]; got == "" {
+		t.Fatal("expected context_ctx_memory_fingerprint metadata to be populated")
+	}
 	if got := run.Metadata["context_ctx_reused_artifact_count"]; got == "" {
 		t.Fatal("expected context_ctx_reused_artifact_count metadata to be populated")
 	}
