@@ -409,6 +409,45 @@ func TestSessionSummaryUsesFirstUserMessageForTitle(t *testing.T) {
 	if !strings.Contains(summary.LastUserMessage, "Второе сообщение") {
 		t.Fatalf("expected last user message to remain the latest one, got %#v", summary)
 	}
+	if summary.AgentTagline == "" || len(summary.AgentShortDescription) != 3 {
+		t.Fatalf("expected agent guidance metadata in session summary, got %#v", summary)
+	}
+}
+
+func TestListPresetCardsIncludesShortDescription(t *testing.T) {
+	root := t.TempDir()
+	presetDir := filepath.Join(root, "sample")
+	if err := os.MkdirAll(presetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+  "id": "sample-preset",
+  "name": "Sample Preset",
+  "tagline": "Short tagline.",
+  "short_description": [
+    "First sentence.",
+    "Second sentence.",
+    "Third sentence."
+  ],
+  "goal": "Sample goal.",
+  "adapter": "arc",
+  "category": "test",
+  "preset_type": "domain",
+  "version": "1.0.0",
+  "files": [],
+  "author": {"name": "ARC Team", "handle": "arc"}
+}`
+	if err := os.WriteFile(filepath.Join(presetDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cards, err := NewService().ListPresetCards(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || len(cards[0].ShortDescription) != 3 {
+		t.Fatalf("expected preset card short description, got %#v", cards)
+	}
 }
 
 func TestAugmentPromptWithSessionsUsesSanitizedChatExcerpts(t *testing.T) {
@@ -503,11 +542,54 @@ func TestPrepareChatPromptKeepsVisibleUserTextClean(t *testing.T) {
 }
 
 func TestChatProviderTimeoutUsesLongerBudgetForVisualRequests(t *testing.T) {
-	if got := chatProviderTimeout("Сделай мини-симуляцию про клетку"); got != 5*time.Minute {
-		t.Fatalf("expected visual chat timeout of 5m, got %s", got)
+	if got := chatProviderTimeout("Сделай мини-симуляцию про клетку"); got != 8*time.Minute {
+		t.Fatalf("expected visual chat timeout of 8m, got %s", got)
 	}
 	if got := chatProviderTimeout("Коротко объясни, что такое ATP"); got != 3*time.Minute {
 		t.Fatalf("expected default chat timeout of 3m, got %s", got)
+	}
+}
+
+func TestSessionNextActionExplainsModelRefreshTimeoutForMiniapps(t *testing.T) {
+	session := chat.Session{
+		Status: "failed",
+		Metadata: map[string]string{
+			"last_error": "codex timed out after 5m0s: signal: killed - ERROR codex_core::models_manager::manager: failed to refresh available models: timeout waiting for child process to exit",
+		},
+		Messages: []chat.Message{
+			{Role: "user", Content: "объясни мне плиз на мини аппке кого убил раскольников"},
+		},
+	}
+
+	got := sessionNextAction(session)
+	if !strings.Contains(got, "Повтори запрос ещё раз") {
+		t.Fatalf("expected retry guidance, got %q", got)
+	}
+	if !strings.Contains(got, "миниапп") {
+		t.Fatalf("expected miniapp guidance, got %q", got)
+	}
+}
+
+func TestSessionNextActionMentionsExhaustedAutoRetryForMiniapps(t *testing.T) {
+	session := chat.Session{
+		Status: "failed",
+		Metadata: map[string]string{
+			"last_error":         "codex timed out after 5m0s: signal: killed - ERROR codex_core::models_manager::manager: failed to refresh available models: timeout waiting for child process to exit",
+			"chat_retry_status":  "exhausted",
+			"chat_retry_reason":  "codex_model_refresh_timeout",
+			"chat_retry_count":   "1",
+		},
+		Messages: []chat.Message{
+			{Role: "user", Content: "объясни мне плиз на мини аппке кого убил раскольников"},
+		},
+	}
+
+	got := sessionNextAction(session)
+	if !strings.Contains(got, "ARC уже сам попробовал повторить") {
+		t.Fatalf("expected exhausted retry guidance, got %q", got)
+	}
+	if !strings.Contains(got, "миниапп") {
+		t.Fatalf("expected miniapp guidance, got %q", got)
 	}
 }
 

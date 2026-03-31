@@ -141,6 +141,57 @@ func (a *replyOnlyCaptureAdapter) ResumeSession(_ context.Context, sessionID str
 	return provider.TaskResult{SessionID: sessionID, StdoutPath: req.TranscriptOut}, nil
 }
 
+type flakyCodexRetryAdapter struct {
+	callCount int
+	timeouts  []time.Duration
+}
+
+func (a *flakyCodexRetryAdapter) Name() string { return "codex" }
+func (a *flakyCodexRetryAdapter) CheckInstalled(context.Context) provider.Status {
+	return provider.Status{Name: "codex", Installed: true}
+}
+func (a *flakyCodexRetryAdapter) GetCapabilities(context.Context) []string { return nil }
+func (a *flakyCodexRetryAdapter) ApplyProjectScaffold(string) error        { return nil }
+func (a *flakyCodexRetryAdapter) EstimateRisk(string) string               { return "low" }
+func (a *flakyCodexRetryAdapter) CollectTranscript(string) (string, error) { return "", nil }
+func (a *flakyCodexRetryAdapter) RunTask(_ context.Context, req provider.TaskRequest) (provider.TaskResult, error) {
+	a.callCount++
+	a.timeouts = append(a.timeouts, req.Timeout)
+	if a.callCount == 1 {
+		stderrPath := strings.TrimSuffix(req.TranscriptOut, filepath.Ext(req.TranscriptOut)) + ".stderr.log"
+		_ = os.WriteFile(stderrPath, []byte("ERROR codex_core::models_manager::manager: failed to refresh available models: timeout waiting for child process to exit\n"), 0o644)
+		return provider.TaskResult{StderrPath: stderrPath}, errors.New("codex timed out after 5m0s: signal: killed")
+	}
+	_ = os.WriteFile(req.LastMessageOut, []byte("assistant recovered reply\n"), 0o644)
+	_ = os.WriteFile(req.TranscriptOut, []byte("{\"turn\":1,\"retry\":true}\n"), 0o644)
+	return provider.TaskResult{SessionID: "retry-session", StdoutPath: req.TranscriptOut}, nil
+}
+func (a *flakyCodexRetryAdapter) ResumeSession(_ context.Context, sessionID string, req provider.TaskRequest) (provider.TaskResult, error) {
+	return a.RunTask(context.Background(), req)
+}
+
+type alwaysFailingCodexRetryAdapter struct {
+	callCount int
+}
+
+func (a *alwaysFailingCodexRetryAdapter) Name() string { return "codex" }
+func (a *alwaysFailingCodexRetryAdapter) CheckInstalled(context.Context) provider.Status {
+	return provider.Status{Name: "codex", Installed: true}
+}
+func (a *alwaysFailingCodexRetryAdapter) GetCapabilities(context.Context) []string { return nil }
+func (a *alwaysFailingCodexRetryAdapter) ApplyProjectScaffold(string) error        { return nil }
+func (a *alwaysFailingCodexRetryAdapter) EstimateRisk(string) string               { return "low" }
+func (a *alwaysFailingCodexRetryAdapter) CollectTranscript(string) (string, error) { return "", nil }
+func (a *alwaysFailingCodexRetryAdapter) RunTask(_ context.Context, req provider.TaskRequest) (provider.TaskResult, error) {
+	a.callCount++
+	stderrPath := strings.TrimSuffix(req.TranscriptOut, filepath.Ext(req.TranscriptOut)) + ".stderr.log"
+	_ = os.WriteFile(stderrPath, []byte("ERROR codex_core::models_manager::manager: failed to refresh available models: timeout waiting for child process to exit\n"), 0o644)
+	return provider.TaskResult{StderrPath: stderrPath}, errors.New("codex timed out after 5m0s: signal: killed")
+}
+func (a *alwaysFailingCodexRetryAdapter) ResumeSession(_ context.Context, sessionID string, req provider.TaskRequest) (provider.TaskResult, error) {
+	return a.RunTask(context.Background(), req)
+}
+
 func TestRunTurnAndList(t *testing.T) {
 	root := t.TempDir()
 	if _, err := project.Init(root, project.InitOptions{
@@ -393,6 +444,96 @@ func TestRunTurnMarksChatRequestsReplyOnly(t *testing.T) {
 	}
 	if !adapter.lastRequest.ReplyOnly {
 		t.Fatal("expected normal chat run to mark provider request as reply-only")
+	}
+}
+
+func TestRunTurnRetriesTransientCodexModelRefreshTimeoutForVisualPrompt(t *testing.T) {
+	root := t.TempDir()
+	if _, err := project.Init(root, project.InitOptions{
+		Provider:         "codex",
+		EnabledProviders: []string{"codex"},
+		Mode:             "study",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	session := Session{
+		ID:        "retry-chat",
+		Root:      root,
+		Provider:  "codex",
+		Mode:      "study",
+		Status:    "running",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		Messages: []Message{
+			{Turn: 1, Role: "user", Content: "объясни мне плиз на мини аппке кого убил раскольников", CreatedAt: time.Now().UTC().Format(time.RFC3339)},
+		},
+	}
+
+	adapter := &flakyCodexRetryAdapter{}
+	got, err := runTurn(root, session, adapter, "объясни мне плиз на мини аппке кого убил раскольников", "", false, 5*time.Minute, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adapter.callCount != 2 {
+		t.Fatalf("expected 2 provider attempts, got %d", adapter.callCount)
+	}
+	if len(adapter.timeouts) != 2 || adapter.timeouts[1] <= adapter.timeouts[0] {
+		t.Fatalf("expected retry to use a larger timeout, got %#v", adapter.timeouts)
+	}
+	if got.Status != "ready" {
+		t.Fatalf("expected recovered session to be ready, got %q", got.Status)
+	}
+	if got.Metadata["chat_retry_status"] != "recovered" {
+		t.Fatalf("expected recovered retry status, got %#v", got.Metadata)
+	}
+	if got.Metadata["last_error"] != "" {
+		t.Fatalf("expected last_error to be cleared after recovery, got %#v", got.Metadata)
+	}
+	if got.Messages[1].Artifacts["retry"] == "" {
+		t.Fatalf("expected retry artifact on assistant message, got %#v", got.Messages[1].Artifacts)
+	}
+}
+
+func TestRunTurnMarksRetryExhaustedWhenTransientCodexFailureRepeats(t *testing.T) {
+	root := t.TempDir()
+	if _, err := project.Init(root, project.InitOptions{
+		Provider:         "codex",
+		EnabledProviders: []string{"codex"},
+		Mode:             "study",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	session := Session{
+		ID:        "retry-failed-chat",
+		Root:      root,
+		Provider:  "codex",
+		Mode:      "study",
+		Status:    "running",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		Messages: []Message{
+			{Turn: 1, Role: "user", Content: "сделай мини-симуляцию про раскольникова", CreatedAt: time.Now().UTC().Format(time.RFC3339)},
+		},
+	}
+
+	adapter := &alwaysFailingCodexRetryAdapter{}
+	got, err := runTurn(root, session, adapter, "сделай мини-симуляцию про раскольникова", "", false, 5*time.Minute, true)
+	if err == nil {
+		t.Fatal("expected final provider failure")
+	}
+	if adapter.callCount != 2 {
+		t.Fatalf("expected 2 provider attempts, got %d", adapter.callCount)
+	}
+	if got.Metadata["chat_retry_status"] != "exhausted" {
+		t.Fatalf("expected exhausted retry status, got %#v", got.Metadata)
+	}
+	if got.Metadata["chat_retry_reason"] != "codex_model_refresh_timeout" {
+		t.Fatalf("expected retry reason metadata, got %#v", got.Metadata)
+	}
+	if got.Messages[1].Artifacts["retry"] == "" {
+		t.Fatalf("expected retry artifact on failed assistant message, got %#v", got.Messages[1].Artifacts)
 	}
 }
 

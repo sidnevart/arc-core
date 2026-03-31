@@ -394,25 +394,34 @@ func runTurn(root string, session Session, adapter provider.Adapter, prompt stri
 		Timeout:        timeout,
 	}
 
-	var result provider.TaskResult
-	var err error
-	if first {
-		result, err = adapter.RunTask(context.Background(), req)
-	} else {
-		result, err = adapter.ResumeSession(context.Background(), session.ProviderSessionID, req)
-	}
+	result, err, retryJSONPath, retryMDPath := executeChatTurn(adapter, session.ProviderSessionID, req, first, runDir, turnPrefix)
+	retried := retryJSONPath != "" || retryMDPath != ""
 
 	session.UpdatedAt = nowUTC()
 	if result.SessionID != "" {
 		session.ProviderSessionID = result.SessionID
 	}
 	session.Status = "ready"
+	if session.Metadata == nil {
+		session.Metadata = map[string]string{}
+	}
+	delete(session.Metadata, "last_error")
+	delete(session.Metadata, "chat_retry_count")
+	delete(session.Metadata, "chat_retry_reason")
+	delete(session.Metadata, "chat_retry_status")
 	if err != nil {
 		session.Status = "failed"
-		if session.Metadata == nil {
-			session.Metadata = map[string]string{}
-		}
 		session.Metadata["last_error"] = enrichErrorWithStderr(err, result.StderrPath)
+	}
+	if retried {
+		session.Metadata["chat_retry_count"] = "1"
+		session.Metadata["chat_retry_reason"] = "codex_model_refresh_timeout"
+	}
+	if retried && err == nil {
+		session.Metadata["chat_retry_status"] = "recovered"
+	}
+	if retried && err != nil {
+		session.Metadata["chat_retry_status"] = "exhausted"
 	}
 	assistantContent, _ := project.ReadString(lastMessagePath)
 	assistantContent = strings.TrimSpace(assistantContent)
@@ -424,6 +433,12 @@ func runTurn(root string, session Session, adapter provider.Adapter, prompt stri
 		"last_message": lastMessagePath,
 		"transcript":   transcriptPath,
 		"stderr":       result.StderrPath,
+	}
+	if retryJSONPath != "" {
+		artifacts["retry"] = retryJSONPath
+	}
+	if retryMDPath != "" {
+		artifacts["retry_markdown"] = retryMDPath
 	}
 	for key, value := range outputArtifacts {
 		artifacts[key] = value
@@ -450,6 +465,56 @@ func runTurn(root string, session Session, adapter provider.Adapter, prompt stri
 		return Session{}, errSave
 	}
 	return session, err
+}
+
+func executeChatTurn(adapter provider.Adapter, providerSessionID string, req provider.TaskRequest, first bool, runDir string, turnPrefix string) (provider.TaskResult, error, string, string) {
+	result, err := invokeChatTurn(adapter, providerSessionID, req, first)
+	if err == nil {
+		return result, nil, "", ""
+	}
+	retry := shouldRetryChatTurn(adapter, req, err, result)
+	if !retry.Allow {
+		return result, err, "", ""
+	}
+
+	retryRecord := retryArtifact{
+		AttemptCount:   1,
+		Status:         "retrying",
+		Reason:         retry.Reason,
+		InitialTimeout: req.Timeout,
+		RetryTimeout:   retry.RetryTimeout,
+		InitialError:   enrichErrorWithStderr(err, result.StderrPath),
+		RetriedAt:      nowUTC(),
+	}
+
+	retryReq := req
+	retryReq.Timeout = retry.RetryTimeout
+	retryResult, retryErr := invokeChatTurn(adapter, providerSessionID, retryReq, first)
+	retryJSONPath := ""
+	retryMDPath := ""
+	if retryErr == nil {
+		retryRecord.Status = "recovered"
+		retryRecord.RecoveredAt = nowUTC()
+	} else {
+		retryRecord.Status = "failed_after_retry"
+		retryRecord.FailedAfterRetryAt = nowUTC()
+	}
+	jsonPath, mdPath, artifactErr := writeRetryArtifact(runDir, turnPrefix, retryRecord)
+	if artifactErr == nil {
+		retryJSONPath = jsonPath
+		retryMDPath = mdPath
+	}
+	if retryErr == nil {
+		return retryResult, nil, retryJSONPath, retryMDPath
+	}
+	return retryResult, retryErr, retryJSONPath, retryMDPath
+}
+
+func invokeChatTurn(adapter provider.Adapter, providerSessionID string, req provider.TaskRequest, first bool) (provider.TaskResult, error) {
+	if first {
+		return adapter.RunTask(context.Background(), req)
+	}
+	return adapter.ResumeSession(context.Background(), providerSessionID, req)
 }
 
 func enrichErrorWithStderr(err error, stderrPath string) string {
